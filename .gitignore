@@ -1,0 +1,7 @@
+# místní nastavení editoru / nástrojů
+.claude/
+.vscode/
+node_modules/
+Thumbs.db
+desktop.ini
+.DS_Store
