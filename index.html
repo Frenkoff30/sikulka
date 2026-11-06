@@ -92,8 +92,8 @@
     <section class="sec">
       <div class="sec-h"><span class="n">3</span><h2>Řezání</h2></div>
       <div class="seg" role="radiogroup" aria-label="Způsob řezání">
-        <input type="radio" name="cut" id="c-g" value="g"><label for="c-g">Tabulové nůžky</label>
-        <input type="radio" name="cut" id="c-f" value="f"><label for="c-f">Volný řez</label>
+        <input type="radio" name="cut" id="c-g" value="g"><label for="c-g"><span class="seg2"><b>Tabulové nůžky</b><small>rovně přes celý kus</small></span></label>
+        <input type="radio" name="cut" id="c-f" value="f"><label for="c-f"><span class="seg2"><b>Volný řez</b><small>ruční nůžky, laser</small></span></label>
       </div>
       <div class="field kerf"><label for="kerf">Mezera mezi díly</label><div class="inp"><input type="text" id="kerf" inputmode="decimal" autocomplete="off" placeholder="0"><span class="u-l">mm</span></div></div>
     </section>
@@ -121,6 +121,12 @@
         </div>
         <div class="ed-form">
           <div class="field"><label for="eName">Název</label><input type="text" class="plain" id="eName" placeholder="např. Stříška komínu" autocomplete="off"></div>
+          <div class="ed-bend" id="eBend" hidden>
+            <div class="bend-top"><span class="lbl">Rychle začít</span><div class="chips" id="bendPresets"></div></div>
+            <div class="lbl">Profil od kraje <i class="dot"></i> – strany a ohyby</div>
+            <div class="bend-list" id="bendList"></div>
+            <button type="button" class="btn ghost sm" id="bendAdd">＋ Přidat stranu</button>
+          </div>
           <div class="ed-fields" id="eFields"></div>
           <div class="ed-draw" id="eDraw" hidden>
             <div class="chips" id="snapChips"></div>
@@ -145,7 +151,7 @@
             <div class="field"><span class="lbl">Kusů</span>
               <div class="qty big" role="group" aria-label="Počet kusů"><button type="button" data-q="-1" aria-label="Ubrat kus">−</button><input type="text" id="eQty" inputmode="numeric" aria-label="Počet kusů"><button type="button" data-q="1" aria-label="Přidat kus">+</button></div>
             </div>
-            <label class="switch" title="Program smí díl při skládání otočit napříč (o 90°). Vypni u plechu se směrem – drážky, lak."><input type="checkbox" id="eRot"><i></i>Může se otočit</label>
+            <label class="switch" title="Program smí díl při skládání otočit napříč (o 90°). Vypni u plechu se směrem – drážky, lak."><input type="checkbox" id="eRot"><i></i>Smí se otočit</label>
           </div>
           <p class="err" id="eErr" hidden></p>
         </div>

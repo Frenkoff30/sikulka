@@ -118,8 +118,67 @@ export const SHAPES = {
     },
   },
   custom: { n: 'Vlastní tvar', edges: true, custom: true },
+  // Ohýbaný profil: strany a ohyby v příčném řezu → rozvinutá šířka (r. š.) × délka kusu.
+  bend: {
+    n: 'Ohýbaný profil', bend: true,
+    f: [['l', 'Délka kusu', 2000, 'pos', 'mm'], ['ded', 'Odečet za ohyb', 0, 'nonneg', 'mm']],
+  },
 };
-export const SHAPE_ORDER = ['rect', 'bevel', 'trap', 'tri', 'rtri', 'para', 'lshape', 'circle', 'ring', 'sector', 'cone', 'custom'];
+
+/* ---------- ohýbaný profil ---------- */
+// strana: { L: délka, a: úhel ohybu za stranou (90 = pravý úhel, 180 = záhyb), d: 1 nahoru / -1 dolů }
+export const BEND_PRESETS = [
+  ['Úhelník', [[50, 90, 1], [50]]],
+  ['U-profil', [[40, 90, 1], [100, 90, 1], [40]]],
+  ['Z-profil', [[40, 90, 1], [60, 90, -1], [40]]],
+  ['Se záhybem', [[10, 180, -1], [150, 90, 1], [40]]],
+];
+export const presetSegs = (k) => BEND_PRESETS[k][1].map(([L, a, d]) => (a ? { L: toUnit(L), a: String(a), d } : { L: toUnit(L) }));
+
+/** Rozvinutá šířka a místa ohybů (od kraje, kde začíná 1. strana). Vše v mm. */
+export function bendGeo(segs, ded) {
+  let pos = 0; const marks = [];
+  segs.forEach((s, i) => {
+    pos += s.L;
+    if (i < segs.length - 1) { const di = ded * Math.min(s.a, 90) / 90; marks.push(pos - di / 2); pos -= di; }
+  });
+  return { w: pos, marks };
+}
+
+/** Příčný řez profilu jako SVG. b = { segs:[{L,a,d}] } v mm. */
+export function profileSVG(b, o = {}) {
+  const pts = [[0, 0]]; let ph = 0;
+  b.segs.forEach((s, i) => {
+    const q = pts[pts.length - 1]; pts.push([q[0] + s.L * Math.cos(ph), q[1] - s.L * Math.sin(ph)]);
+    if (i < b.segs.length - 1) ph += s.d * Math.min(s.a, 172) * Math.PI / 180;  // záhyb kreslíme lehce pootevřený
+  });
+  let mx = Infinity, my = Infinity, Mx = -Infinity, My = -Infinity;
+  for (const p of pts) { mx = Math.min(mx, p[0]); my = Math.min(my, p[1]); Mx = Math.max(Mx, p[0]); My = Math.max(My, p[1]); }
+  const W = Math.max(Mx - mx, 1), H = Math.max(My - my, 1), M = Math.max(W, H);
+  const pad = o.labels ? M * 0.2 : M * 0.08, fs = M / 13;
+  const d = 'M' + pts.map((p) => `${(p[0] - mx).toFixed(2)} ${(p[1] - my).toFixed(2)}`).join('L');
+  const out = [`<path d="${d}" class="pf-l" vector-effect="non-scaling-stroke"/>`, `<circle cx="${pts[0][0] - mx}" cy="${pts[0][1] - my}" r="${M * 0.025}" class="pf-s"/>`];
+  if (o.labels) {
+    b.segs.forEach((s, i) => {
+      const a = pts[i], c = pts[i + 1], dx = c[0] - a[0], dy = c[1] - a[1], L = Math.hypot(dx, dy) || 1;
+      let nx = dy / L, ny = -dx / L;
+      // popisek na vnější stranu (od středu profilu)
+      const cx = (a[0] + c[0]) / 2 - mx, cy = (a[1] + c[1]) / 2 - my;
+      if ((cx - W / 2) * nx + (cy - H / 2) * ny < 0) { nx = -nx; ny = -ny; }
+      out.push(`<text x="${cx + nx * fs * 1.1}" y="${cy + ny * fs * 1.1}" class="pf-t" font-size="${fs}" text-anchor="middle" dominant-baseline="central">${fmt(s.L)}</text>`);
+      if (i < b.segs.length - 1) {
+        // úhel na vnější stranu ohybu (osa mezi stranami)
+        const e = pts[i + 2], ux = dx / L, uy = dy / L, vx = e[0] - c[0], vy = e[1] - c[1], vl = Math.hypot(vx, vy) || 1;
+        let ex = ux - vx / vl, ey = uy - vy / vl; const el = Math.hypot(ex, ey) || 1; ex /= el; ey /= el;
+        out.push(`<text x="${c[0] - mx + ex * fs * 1.3}" y="${c[1] - my + ey * fs * 1.3}" class="pf-a" font-size="${fs * 0.8}" text-anchor="middle" dominant-baseline="central">${s.a >= 180 ? 'záhyb' : fmtN(s.a) + '°'}</text>`);
+      }
+    });
+  }
+  const sz = o.size ? ` width="${o.size}" height="${o.size}"` : '';
+  return `<svg viewBox="${-pad} ${-pad} ${W + pad * 2} ${H + pad * 2}"${sz} class="pf" role="img" aria-label="Řez profilem">${out.join('')}</svg>`;
+}
+
+export const SHAPE_ORDER = ['rect', 'bend', 'bevel', 'trap', 'tri', 'rtri', 'para', 'lshape', 'circle', 'ring', 'sector', 'cone', 'custom'];
 
 export function defaults(t) {
   const d = SHAPES[t]; const p = {};
@@ -159,7 +218,7 @@ export function pathD(rings, ox = 0, oy = 0) {
 export function geomOf(pc) {
   const t = SHAPES[pc.shape?.t] ? pc.shape.t : 'rect';
   const def = SHAPES[t];
-  let poly, p = null;
+  let poly, p = null, bend = null;
   if (def.custom) {
     const pts = (pc.shape.pts || []).map((q) => [+q[0], +q[1]]).filter((q) => isFinite(q[0]) && isFinite(q[1]));
     if (pts.length < 3) return { ok: false, t, name: def.n, err: 'Nakresli aspoň 3 body obrysu.' };
@@ -176,11 +235,23 @@ export function geomOf(pc) {
     }
     const e = def.check && def.check(p);
     if (e) return { ok: false, t, name: def.n, err: e };
-    poly = def.poly(p);
+    if (def.bend) {
+      const segs = (pc.shape.segs || []).map((s) => ({ L: lenv(s.L), a: numv(s.a), d: s.d < 0 ? -1 : 1 }));
+      if (segs.length < 2) return { ok: false, t, name: def.n, err: 'Profil potřebuje aspoň 2 strany.' };
+      for (let i = 0; i < segs.length; i++) {
+        if (!(segs[i].L > 0)) return { ok: false, t, name: def.n, err: `Zkontroluj délku ${i + 1}. strany.` };
+        if (i < segs.length - 1 && !(segs[i].a > 0 && segs[i].a <= 180)) return { ok: false, t, name: def.n, err: `Úhel ${i + 1}. ohybu musí být 1–180°.` };
+      }
+      const G = bendGeo(segs, p.ded);
+      if (!(G.w > 0)) return { ok: false, t, name: def.n, err: 'Odečet je větší než profil.' };
+      p.w = Math.round(G.w * 10) / 10;
+      bend = { segs, w: p.w, marks: G.marks, ded: p.ded };
+      poly = { o: [[0, 0], [p.l, 0], [p.l, p.w], [0, p.w]], holes: [] };
+    } else poly = def.poly(p);
   }
   const n = polyXform(poly, 0);
-  const sum = def.custom ? `${fmt(n.w)} × ${fmt(n.hh)}` : def.sum(p);
-  return { ok: true, t, name: def.n, p, poly: { o: n.o, holes: n.holes }, area: polyArea(n), bw: n.w, bh: n.hh, sum, isRect: t === 'rect' };
+  const sum = def.custom ? `${fmt(n.w)} × ${fmt(n.hh)}` : bend ? `r. š. ${fmt(p.w)} × ${fmt(p.l)}` : def.sum(p);
+  return { ok: true, t, name: def.n, p, poly: { o: n.o, holes: n.holes }, area: polyArea(n), bw: n.w, bh: n.hh, sum, isRect: t === 'rect' || !!bend, bend };
 }
 
 /** Místo pro popisek uvnitř tvaru: bod co nejdál od okrajů + volná šířka/výška kolem něj. */
@@ -240,6 +311,7 @@ export function thumbSVG(poly, ci, size = 52) {
 /** Ikona šablony (pro výběr tvaru). */
 export function iconSVG(t) {
   let poly;
+  if (t === 'bend') return profileSVG({ segs: [{ L: 14, a: 90, d: 1 }, { L: 30, a: 90, d: 1 }, { L: 14 }] }).replace('class="pf"', 'class="pf ic"');
   if (t === 'custom') poly = { o: [[0, 30], [10, 0], [26, 8], [40, 2], [34, 30], [18, 22]], holes: [] };
   else poly = SHAPES[t].poly(Object.fromEntries(SHAPES[t].f.map((f) => [f[0], f[2]])));
   const n = polyXform(poly, 0);

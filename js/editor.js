@@ -1,6 +1,6 @@
 // Editor dílu: výběr klempířské šablony, nebo nakreslení vlastního tvaru bod po bodu.
 import { $, esc, fmt, fmtN, numv, lenv, U, isExpr } from './format.js';
-import { SHAPES, SHAPE_ORDER, defaults, geomOf, iconSVG, pathD, inside } from './shapes.js';
+import { SHAPES, SHAPE_ORDER, defaults, geomOf, iconSVG, pathD, inside, profileSVG, BEND_PRESETS, presetSegs } from './shapes.js';
 import { polyXform } from './nest-engine.js';
 
 let ed = null;       // rozpracovaný díl
@@ -27,6 +27,31 @@ export function initEditor() {
     const q = Math.max(1, (parseInt(ed.d.q, 10) || 0) + +b.dataset.q); ed.d.q = String(q); $('eQty').value = ed.d.q;
   }));
   $('toCustom').addEventListener('click', toCustom);
+  // ohýbaný profil
+  $('bendPresets').innerHTML = BEND_PRESETS.map(([n], k) => `<button type="button" class="chip" data-pk="${k}">${n}</button>`).join('');
+  $('bendPresets').addEventListener('click', (e) => { const b = e.target.closest('[data-pk]'); if (!b) return; ed.d.shape.segs = presetSegs(+b.dataset.pk); renderBend(); renderPreview(); });
+  $('bendList').addEventListener('input', (e) => {
+    const i = +e.target.dataset.s, k = e.target.dataset.k; if (isNaN(i) || !k) return;
+    ed.d.shape.segs[i][k] = e.target.value;
+    if (k === 'a') e.target.closest('.bbend').querySelectorAll('[data-ang]').forEach((c) => c.setAttribute('aria-pressed', String(numv(e.target.value) === +c.dataset.ang)));
+    renderPreview();
+  });
+  $('bendList').addEventListener('click', (e) => {
+    const segs = ed.d.shape.segs, b = e.target.closest('button'); if (!b) return;
+    const i = +b.dataset.s;
+    if (b.dataset.ang) segs[i].a = b.dataset.ang;
+    else if (b.dataset.dir) segs[i].d = +b.dataset.dir;
+    else if (b.dataset.sdel !== undefined) { if (segs.length <= 2) return; segs.splice(i, 1); delete segs[segs.length - 1].a; }
+    else return;
+    renderBend(); renderPreview();
+  });
+  $('bendAdd').addEventListener('click', () => {
+    const segs = ed.d.shape.segs, last = segs[segs.length - 1];
+    if (!last.a) { last.a = '90'; last.d = 1; }
+    segs.push({ L: last.L });
+    renderBend(); renderPreview();
+    const ins = $('bendList').querySelectorAll('input[data-k="L"]'); const f = ins[ins.length - 1]; f.focus(); f.select();
+  });
   $('dlgX').addEventListener('click', closeEditor);
   $('dlg').addEventListener('click', (e) => { if (e.target === $('dlg')) closeEditor(); });
   $('eSave').addEventListener('click', () => save(false));
@@ -116,12 +141,15 @@ function renderForm() {
   $('eFields').hidden = custom; $('eDraw').hidden = !custom;
   $('ePrev').hidden = custom; $('drawSvg').toggleAttribute('hidden', !custom);
   $('toCustom').hidden = custom || !def.edges;
+  $('eBend').hidden = !def.bend;
   if (custom) { syncSnap(); redrawCustom(); return; }
+  if (def.bend) { if (!(ed.d.shape.segs?.length >= 2)) ed.d.shape.segs = presetSegs(1); renderBend(); }
   $('eFields').innerHTML = def.f.map(([k, label, , , unit]) => {
     const v = ed.d.shape.p[k] ?? ''; const n = unit === '°' ? numv(v) : lenv(v);
     const kb = t === 'rect' && k === 'w' ? '' : ' inputmode="decimal"';
     return `<div class="field"><label for="ef-${k}">${label}</label><div class="inp"><input type="text" id="ef-${k}" data-k="${k}" value="${esc(v)}"${kb} autocomplete="off"><span>${unit === '°' ? '°' : U()}</span></div><div class="eq" id="eq-${k}">${isExpr(v) && !isNaN(n) ? '= ' + (unit === '°' ? fmtN(n) : fmt(n)) : ''}</div></div>`;
-  }).join('') + (t === 'rect' ? `<p class="hint">Šířku můžeš zadat jako <b>rozvin</b>: 20+120+150+20</p>` : '');
+  }).join('') + (t === 'rect' ? `<p class="hint">Ohýbaný díl? Zvol nahoře <b>Ohýbaný profil</b> – rozvin spočítá sám.</p>` : '')
+    + (def.bend ? `<p class="hint">Odečet = o kolik je pás kratší na každém ohybu (podle ohýbačky). Nech 0 a r. š. bude součet stran.</p>` : '');
   renderPreview();
 }
 
@@ -133,10 +161,41 @@ function renderPreview() {
     return;
   }
   $('eErr').hidden = true;
-  $('ePrev').innerHTML = shapeSVG(g, SHAPES[ed.d.shape.t].edges);
   const def = SHAPES[ed.d.shape.t];
+  if (g.bend) {
+    $('ePrev').innerHTML = `<div class="pv-bend"><div class="pv-cap">Řez profilem</div>${profileSVG(g.bend, { labels: true })}<div class="pv-cap">Rozvin – kde orýsovat ohyby</div>${stripSVG(g.bend)}</div>`;
+    $('eInfo').innerHTML = `<span class="big">Rozvinutá šířka <b>${fmt(g.bend.w)} ${U()}</b></span><span>Ohyby orýsuj od kraje <i class="dot"></i>: <b>${g.bend.marks.map(fmt).join(' · ')}</b> ${U()}</span>`;
+    return;
+  }
+  $('ePrev').innerHTML = shapeSVG(g, SHAPES[ed.d.shape.t].edges);
   const lines = (def.info ? def.info(g.p) : []).concat([`Zabere ${fmt(g.bh)} × ${fmt(g.bw)} ${U()} · ${(g.area / 1e6).toLocaleString('cs-CZ', { maximumFractionDigits: 3 })} m²`]);
   $('eInfo').innerHTML = lines.map((l) => `<span>${esc(l)}</span>`).join('');
+}
+
+/* ---------- ohýbaný profil ---------- */
+function renderBend() {
+  const segs = ed.d.shape.segs, n = segs.length;
+  const angs = [45, 90, 135, 180];
+  $('bendList').innerHTML = segs.map((s, i) => {
+    const row = `<div class="bseg"><span class="bn">${i + 1}</span><span class="bl">strana</span><div class="inp"><input type="text" inputmode="decimal" data-s="${i}" data-k="L" value="${esc(s.L)}" aria-label="Délka ${i + 1}. strany" autocomplete="off"><span>${U()}</span></div>${n > 2 ? `<button type="button" class="del" data-s="${i}" data-sdel aria-label="Smazat ${i + 1}. stranu">✕</button>` : '<span></span>'}</div>`;
+    if (i === n - 1) return row;
+    const a = numv(s.a), up = s.d >= 0;
+    return row + `<div class="bbend"><span class="bl">ohyb</span>
+      <div class="bang">${angs.map((x) => `<button type="button" class="chip" data-s="${i}" data-ang="${x}" aria-pressed="${a === x}">${x === 180 ? '180° záhyb' : x + '°'}</button>`).join('')}<div class="inp ang"><input type="text" inputmode="decimal" data-s="${i}" data-k="a" value="${esc(s.a)}" aria-label="Úhel ${i + 1}. ohybu"><span>°</span></div></div>
+      <div class="bdir"><button type="button" data-s="${i}" data-dir="1" aria-pressed="${up}">↑ nahoru</button><button type="button" data-s="${i}" data-dir="-1" aria-pressed="${!up}">↓ dolů</button></div></div>`;
+  }).join('');
+}
+
+/** Rozvinutý pás s čárami ohybů a mírami od kraje. */
+function stripSVG(b) {
+  const W = b.w, H = Math.max(W * 0.22, 1), fs = W / 16, pad = fs * 2.2;
+  const o = [`<rect x="0" y="0" width="${W}" height="${H}" class="pv-strip" vector-effect="non-scaling-stroke"/>`, `<circle cx="0" cy="${H / 2}" r="${fs * 0.32}" class="pf-s"/>`];
+  b.marks.forEach((m, i) => {
+    o.push(`<line x1="${m}" y1="0" x2="${m}" y2="${H}" class="pv-bl" vector-effect="non-scaling-stroke"/>`);
+    o.push(`<text x="${m}" y="${-fs * 0.45 - (i % 2) * fs * 0.95}" class="pf-t" font-size="${fs * 0.8}" text-anchor="middle">${fmt(m)}</text>`);
+  });
+  o.push(`<text x="${W / 2}" y="${H + fs * 1.15}" class="pf-a" font-size="${fs * 0.75}" text-anchor="middle">r. š. ${fmt(W)} ${U()}</text>`);
+  return `<svg viewBox="${-pad} ${-pad * 1.4} ${W + pad * 2} ${H + pad * 2.4}" class="pf strip" role="img" aria-label="Rozvinutý pás s ohyby">${o.join('')}</svg>`;
 }
 
 function shapeSVG(g, edges) {
@@ -265,7 +324,7 @@ function save(more) {
   const g = geomOf(ed.d);
   if (!g.ok) { $('eErr').textContent = g.err; $('eErr').hidden = false; return; }
   lastT = ed.d.shape.t;
-  const piece = { name: ed.d.name, q: ed.d.q, rot: !!ed.d.rot, shape: { t: ed.d.shape.t, p: ed.d.shape.p, pts: ed.d.shape.t === 'custom' ? ed.d.shape.pts : [] } };
+  const piece = { name: ed.d.name, q: ed.d.q, rot: !!ed.d.rot, shape: { t: ed.d.shape.t, p: ed.d.shape.p, pts: ed.d.shape.t === 'custom' ? ed.d.shape.pts : [], ...(ed.d.shape.t === 'bend' ? { segs: ed.d.shape.segs } : {}) } };
   const idx = ed.idx;
   if (more) {
     cb.onSave(piece, idx, true);
