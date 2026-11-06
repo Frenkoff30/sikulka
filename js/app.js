@@ -1,9 +1,9 @@
 // Nářez plechu – hlavní logika aplikace: zadání, seznam dílů, výpočet, zakázky, instalace.
 import { $, esc, fmt, numv, lenv, toUnit, setUnit, U, UNITS, plural } from './format.js';
-import { SHAPES, defaults, geomOf, thumbSVG } from './shapes.js';
+import { SHAPES, defaults, geomOf, thumbSVG, profileSVG } from './shapes.js';
 import { buildConfigs, runRect, evalRect, cmp, mutate, EPS } from './rect-engine.js';
 import { NestSolver } from './nest-engine.js';
-import { renderWarns, renderEmpty, renderRect, renderLayout, layoutFromSnap, layoutFromRect, updateStatus } from './render.js';
+import { renderWarns, renderEmpty, renderBlank, renderRect, renderLayout, layoutFromSnap, layoutFromRect, updateStatus } from './render.js';
 import { initEditor, openEditor } from './editor.js';
 import { openManual } from './manual.js';
 
@@ -62,7 +62,10 @@ function convertUnit(to) {
   const cv = (v) => { const mm = lenv(v, from); return isNaN(mm) ? v : toUnit(mm, to); };
   state.W = cv(state.W); state.L = cv(state.L);
   if (String(state.kerf ?? '').trim() !== '') state.kerf = cv(state.kerf);
-  for (const p of state.pieces) for (const k of lenKeys(p)) if (p.shape.p && k in p.shape.p) p.shape.p[k] = cv(p.shape.p[k]);
+  for (const p of state.pieces) {
+    for (const k of lenKeys(p)) if (p.shape.p && k in p.shape.p) p.shape.p[k] = cv(p.shape.p[k]);
+    for (const s of p.shape.segs || []) s.L = cv(s.L);
+  }
   state.unit = to; setUnit(to);
 }
 function syncUnits() {
@@ -113,9 +116,9 @@ function renderPieces() {
   const list = state.pieces.map((p, i) => {
     const g = geomOf(p), def = SHAPES[p.shape?.t] || SHAPES.rect;
     return `<div class="pcard${g.ok ? '' : ' bad'}" data-i="${i}">
-  <button type="button" class="thumb" data-act="edit" aria-label="Upravit díl ${i + 1}">${g.ok ? thumbSVG(g.poly, i, 52) : '<span class="thumb-x">?</span>'}</button>
+  <button type="button" class="thumb" data-act="edit" aria-label="Upravit díl ${i + 1}">${g.ok ? (g.bend ? profileSVG(g.bend, { size: 44 }) : thumbSVG(g.poly, i, 52)) : '<span class="thumb-x">?</span>'}</button>
   <button type="button" class="pinfo" data-act="edit" title="${esc((p.name ? p.name + ' – ' : '') + def.n)}"><b>${esc(p.name || def.n)}</b><span>${g.ok ? `<span class="mono">${esc(g.sum)}</span>` : esc(g.err)}</span></button>
-  <label class="switch sm" title="Program smí díl při skládání otočit napříč (o 90°). Vypni u plechu se směrem – drážky, lak."><input type="checkbox" data-f="rot" ${p.rot ? 'checked' : ''}><i></i>může se otočit</label>
+  <label class="switch sm" title="Program smí díl při skládání otočit napříč (o 90°). Vypni u plechu se směrem – drážky, lak."><input type="checkbox" data-f="rot" ${p.rot ? 'checked' : ''}><i></i>smí se otočit</label>
   <div class="qty" role="group" aria-label="Počet kusů"><button type="button" data-act="minus" aria-label="Ubrat kus">−</button><input type="text" inputmode="numeric" data-f="q" value="${esc(p.q)}" aria-label="Počet kusů dílu ${i + 1}"><button type="button" data-act="plus" aria-label="Přidat kus">+</button></div>
   <button type="button" class="del" data-act="del" aria-label="Smazat díl ${i + 1}" title="Smazat">✕</button>
 </div>`;
@@ -194,7 +197,7 @@ $('clearAll').addEventListener('click', () => { state.pieces = []; state.example
 function signature() {
   // v mm, aby přepnutí jednotek nezahodilo ruční rozložení
   const mmP = (p) => Object.fromEntries(Object.entries(p.shape.p || {}).map(([k, v]) => [k, lenKeys(p).includes(k) ? lenv(v) : numv(v)]));
-  return JSON.stringify([state.mode, lenv(state.W), state.mode === 'coil' ? '' : lenv(state.L), lenv(state.kerf), state.pieces.map((p) => [p.q, !!p.rot, p.shape.t, p.shape.t === 'custom' ? p.shape.pts : mmP(p)])]);
+  return JSON.stringify([state.mode, lenv(state.W), state.mode === 'coil' ? '' : lenv(state.L), lenv(state.kerf), state.pieces.map((p) => [p.q, !!p.rot, p.shape.t, p.shape.t === 'custom' ? p.shape.pts : mmP(p), (p.shape.segs || []).map((s) => [lenv(s.L), numv(s.a), s.d])])]);
 }
 function makeProblem() {
   const coil = state.mode === 'coil';
@@ -209,7 +212,7 @@ function makeProblem() {
     const g = geomOf(p);
     if (!g.ok) { bad.push({ name: p.name || g.name, err: g.err }); return; }
     const rot = !!p.rot;
-    const info = { pi, name: (p.name || '').trim(), sum: g.sum, shapeName: g.name, ci: pi % 8, poly: g.poly, area: g.area, bw: g.bw, bh: g.bh, q, rot, isRect: g.isRect, w: g.isRect ? g.p.w : 0, l: g.isRect ? g.p.l : 0 };
+    const info = { pi, name: (p.name || '').trim(), sum: g.sum, shapeName: g.name, ci: pi % 8, poly: g.poly, area: g.area, bw: g.bw, bh: g.bh, q, rot, isRect: g.isRect, w: g.isRect ? g.p.w : 0, l: g.isRect ? g.p.l : 0, bend: g.bend };
     const f0 = g.bw <= X + 1e-6 && g.bh <= Y + 1e-6, f1 = rot && g.bh <= X + 1e-6 && g.bw <= Y + 1e-6;
     if (!f0 && !f1) { info.wouldRot = !rot && g.bh <= X + 1e-6 && g.bw <= Y + 1e-6; invalid.push(info); return; }
     byPi[pi] = info; valid.push(info);
@@ -242,7 +245,8 @@ function solve() {
   const id = ++job; stopWork();
   const P = makeProblem();
   renderWarns(P);
-  if (P.errs.length || !P.count) { shown = null; renderEmpty(state.mode); return; }
+  if (P.errs.length) { shown = null; renderEmpty(state.mode); return; }
+  if (!P.count) { shown = null; renderBlank(P); return; }
   if (state.manual) {
     if (state.manual.sig === P.sig) { showManual(P); return; }
     state.manual = null; save(); toast('Zadání se změnilo, ruční rozložení jsem zahodil a počítám znovu.');

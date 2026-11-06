@@ -1,7 +1,7 @@
 // Vykreslení výsledků: souhrn, výkresy tabulí (SVG), postup střihu, rozměření dílů.
 import { fmt, m2, pct, plural, esc, $, U } from './format.js';
 import { polyXform } from './nest-engine.js';
-import { pathD, labelSpot } from './shapes.js';
+import { pathD, labelSpot, profileSVG } from './shapes.js';
 import { EPS, coilExact } from './rect-engine.js';
 
 let uid = 0;
@@ -28,6 +28,42 @@ export function renderWarns(P) {
 export function renderEmpty(mode) {
   $('tools').hidden = true; $('sheets').innerHTML = '';
   $('summary').innerHTML = `<div class="empty"><svg viewBox="0 0 64 44" aria-hidden="true"><rect x="2" y="2" width="60" height="40" rx="2" class="em-s"/><path d="M22 2v40M22 22h40" class="em-c"/></svg><b>Zatím není co skládat</b><span>Zadej ${mode === 'coil' ? 'svitek' : 'tabuli'} a přidej díly – plán se spočítá sám.</span><div class="btnrow"><button type="button" class="btn primary" id="emptyAdd"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M10 4v12M4 10h12"/></svg>Přidat díl</button><button type="button" class="btn ghost" id="loadEx">Načíst ukázku</button></div></div>`;
+}
+
+/** Ještě nejsou díly: ukáže prázdnou tabuli (nebo kus svitku) v zadaném rozměru. */
+export function renderBlank(P) {
+  $('tools').hidden = true;
+  const Y = P.Y, X = P.coil ? Y * 3 : P.X;
+  const M = Math.max(X, Y), fs = M / 42, pad = fs * 2.3;
+  const inner = `<rect x="0" y="0" width="${X}" height="${Y}" class="sv-steel"/>`
+    + `<text x="${X / 2}" y="${Y / 2}" class="sv-to sv-ton" font-size="${fs * 1.1}" text-anchor="middle" dominant-baseline="central">PŘIDEJ DÍLY</text>`
+    + frame(X, Y, P.coil, fs * 0.8, pad, P.coil ? 'svitek – délka podle dílů' : null);
+  $('summary').innerHTML = `<div class="blank"><span>${P.coil ? 'Svitek' : 'Tabule'} je připravená. Přidej díly a poskládají se samy.</span><div class="btnrow"><button type="button" class="btn primary sm" id="emptyAdd"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M10 4v12M4 10h12"/></svg>Přidat díl</button><button type="button" class="btn ghost sm" id="loadEx">Načíst ukázku</button></div></div>`;
+  $('sheets').innerHTML = `<article class="sheet"><div class="sh-head"><h3>${P.coil ? 'Svitek' : 'Tabule'}</h3><span class="tag">${P.coil ? `šíře ${fmt(Y)}` : `${fmt(Y)} × ${fmt(X)}`} ${U()}</span>${P.coil ? '' : `<span class="tag">${m2(X * Y)} m²</span>`}</div><div class="svgbox">${svgWrap(X, Y, pad, inner)}</div></article>`;
+}
+
+/** Čáry ohybů v dílu na výkrese (díl otočený o deg, levý horní roh v ox, oy). */
+function bendLines(info, deg, ox, oy) {
+  if (!info?.bend) return '';
+  const w = info.bend.w, l = info.l;
+  const f = deg === 90 ? ([x, y]) => [-y, x] : deg === 180 ? ([x, y]) => [-x, -y] : deg === 270 ? ([x, y]) => [y, -x] : (q) => q;
+  const cs = [[0, 0], [l, 0], [l, w], [0, w]].map(f), mx = Math.min(...cs.map((c) => c[0])), my = Math.min(...cs.map((c) => c[1]));
+  return info.bend.marks.map((m) => { const a = f([0, m]), b = f([l, m]); return `<line x1="${a[0] - mx + ox}" y1="${a[1] - my + oy}" x2="${b[0] - mx + ox}" y2="${b[1] - my + oy}" class="sv-bend" vector-effect="non-scaling-stroke"/>`; }).join('');
+}
+
+/** Karta „Ohýbání“: každý ohýbaný profil – řez, rozvin a kde orýsovat ohyby. */
+function bendCard(P) {
+  const list = Object.values(P.byPi).filter((v) => v.bend);
+  if (!list.length) return '';
+  const rows = list.map((v) => {
+    const b = v.bend;
+    const steps = b.segs.slice(0, -1).map((s, i) => `<li><b>${fmt(b.marks[i])} ${U()}</b> od kraje – ${s.a >= 180 ? 'záhyb (180°)' : s.a + '°'} ${s.d >= 0 ? 'nahoru' : 'dolů'}</li>`).join('');
+    return `<div class="bcard"><div class="bpf">${profileSVG(b, { labels: true })}</div><div class="binfo">
+      <div class="bt">${pc(v.ci)}<b>${esc(v.name || v.shapeName)}</b><span class="tag">${v.q}×</span></div>
+      <div class="bw">r. š. <b>${fmt(b.w)} ${U()}</b> × délka ${fmt(v.l)} ${U()}</div>
+      <ol class="bsteps">${steps}</ol></div></div>`;
+  }).join('');
+  return `<article class="sheet bends"><div class="sh-head"><h3>Ohýbání</h3><span class="tag">ohyby měř od kraje <i class="dot"></i></span></div><div class="blist">${rows}</div></article>`;
 }
 
 function summaryHTML(o) {
@@ -66,11 +102,11 @@ function fitText(lines, cx, cy, aw, ah, maxF, minF, cls, firstCls, fallback) {
   return `<text class="${cls}" font-size="${c.f}" text-anchor="middle" dominant-baseline="central"${c.rot ? ` transform="rotate(-90 ${cx} ${cy})"` : ''}>${spans}</text>`;
 }
 
-function frame(X, Y, coil, fs, pad) {
+function frame(X, Y, coil, fs, pad, xLabel) {
   const ty = -pad * 0.5, tx = -pad * 0.5;
   return `<rect x="0" y="0" width="${X}" height="${Y}" class="sv-edge" vector-effect="non-scaling-stroke"/>`
     + `<line x1="0" y1="${-pad * 0.2}" x2="${X}" y2="${-pad * 0.2}" class="sv-dl" vector-effect="non-scaling-stroke"/>`
-    + `<text x="${X / 2}" y="${ty}" class="sv-dim" font-size="${fs}" text-anchor="middle">${coil ? 'délka ' : ''}${fmt(X)} ${U()}</text>`
+    + `<text x="${X / 2}" y="${ty}" class="sv-dim" font-size="${fs}" text-anchor="middle">${xLabel ?? `${coil ? 'délka ' : ''}${fmt(X)} ${U()}`}</text>`
     + `<line x1="${-pad * 0.2}" y1="0" x2="${-pad * 0.2}" y2="${Y}" class="sv-dl" vector-effect="non-scaling-stroke"/>`
     + `<text x="${tx}" y="${Y / 2}" class="sv-dim" font-size="${fs}" text-anchor="middle" transform="rotate(-90 ${tx} ${Y / 2})">${fmt(Y)} ${U()}</text>`;
 }
@@ -104,7 +140,7 @@ export function renderRect(best, P, running, opts) {
   updateStatus(running);
   showTools(P.cut === 'g');
   const sig = (s) => s.placed.map((p) => `${p.it.pi}:${Math.round(p.x)},${Math.round(p.y)},${p.r}`).sort().join('|');
-  $('sheets').innerHTML = groupSheets(res.sheets, sig).map((g) => rectCard(g, P, X, exact, opts)).join('');
+  $('sheets').innerHTML = groupSheets(res.sheets, sig).map((g) => rectCard(g, P, X, exact, opts)).join('') + bendCard(P);
 }
 
 function rectCard(g, P, X, exact, opts) {
@@ -162,6 +198,7 @@ function rectSVG(s, P, X, nums, showCuts) {
   for (const p of s.placed) {
     const pw = p.w - k, ph = p.h - k, d = P.byPi[p.it.pi];
     o.push(`<rect x="${p.x}" y="${p.y}" width="${pw}" height="${ph}" class="sv-piece" style="fill:var(--p${d.ci})" vector-effect="non-scaling-stroke"/>`);
+    o.push(bendLines(d, p.r ? 90 : 0, p.x, p.y));
     const dims = `${fmt(d.w)}×${fmt(d.l)}${p.r ? ' ↻' : ''}`;
     o.push(fitText(d.name ? [d.name, dims] : [dims], p.x + pw / 2, p.y + ph / 2, pw, ph, fs * 0.8, minF, 'sv-t', d.name ? 'sv-tn' : null));
   }
@@ -224,7 +261,7 @@ export function renderLayout(L, P, running) {
   if (L.manual) { const el = $('status'); el.hidden = false; el.className = 'status man-on'; el.innerHTML = `<i class="dot"></i>Ručně poskládáno · <button type="button" class="link" id="backAuto">spočítat znovu</button>`; }
   else updateStatus(running);
   showTools(false);
-  $('sheets').innerHTML = groups.map((g) => nestCard(g, P, X, running)).join('');
+  $('sheets').innerHTML = groups.map((g) => nestCard(g, P, X, running)).join('') + bendCard(P);
 }
 
 /** Najde na plechu největší volné obdélníky (mezi díly i za nimi), které se dají ještě použít.
@@ -342,6 +379,7 @@ function nestCard(g, P, X, running) {
     const { t, spot } = xf(P, p.i, p.deg);
     const info = P.byPi[J.parts[p.i].pi]; pa += J.parts[p.i].area; p.info = info;
     o.push(`<path d="${pathD([t.o].concat(t.holes), p.ox, p.oy)}" fill-rule="evenodd" class="sv-piece" style="fill:var(--p${info.ci})" vector-effect="non-scaling-stroke"/>`);
+    o.push(bendLines(info, p.deg, p.ox, p.oy));
     labels.push(fitText([`${k + 1}. ${info.name || info.shapeName}`, info.sum], p.ox + spot.x, p.oy + spot.y, spot.aw, spot.ah, fs * 0.8, minF, 'sv-t', 'sv-tn', [String(k + 1)]));
   });
   o.push(labels.join(''));
