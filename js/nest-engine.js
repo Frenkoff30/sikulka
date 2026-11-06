@@ -179,8 +179,10 @@ export function nestRun(P, order, J) {
 
 export function nestScore(res, J) {
   const n = res.sheets.length;
-  if (J.coil) { let m = 0; for (const s of res.sheets) m = Math.max(m, s.ext); return [res.unplaced.length, m]; }
-  return [res.unplaced.length, n, n ? res.sheets[n - 1].ext : 0];
+  // při shodě vyhraje rozložení, kde je KAŽDÁ tabule co nejvíc nahuštěná ke kraji → větší souvislý zbytek
+  let sum = 0; for (const s of res.sheets) sum += s.ext;
+  if (J.coil) { let m = 0; for (const s of res.sheets) m = Math.max(m, s.ext); return [res.unplaced.length, m, sum]; }
+  return [res.unplaced.length, n, n ? res.sheets[n - 1].ext : 0, sum];
 }
 
 function cmpArr(a, b) { for (let i = 0; i < a.length; i++) { const d = a[i] - b[i]; if (d > 1e-6) return 1; if (d < -1e-6) return -1; } return 0; }
