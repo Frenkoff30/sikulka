@@ -38,56 +38,11 @@
     <button type="button" class="hbtn" id="btnInstall" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M10 3v10M6 9l4 4 4-4M4 16h12"/></svg><span>Nainstalovat</span></button>
     <button type="button" class="hbtn" id="btnJobs"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M2.5 5.5h5l1.8 2h8.2v8.5h-15z"/></svg><span>Zakázky</span></button>
     <button type="button" class="hbtn" id="btnPrint"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M5.5 7.5v-4h9v4M5.5 14h-2v-6.5h13V14h-2M5.5 11h9v6h-9z"/></svg><span>Tisk</span></button>
-    <button type="button" class="hbtn icon" id="btnTheme"><svg viewBox="0 0 20 20" aria-hidden="true"><circle class="ico" cx="10" cy="10" r="6.5"/><path class="ico-f" d="M10 3.5a6.5 6.5 0 0 1 0 13z"/></svg></button>
+    <button type="button" class="hbtn" id="btnTheme"><svg viewBox="0 0 20 20" aria-hidden="true"><circle class="ico" cx="10" cy="10" r="6.5"/><path class="ico-f" d="M10 3.5a6.5 6.5 0 0 1 0 13z"/></svg><span id="themeL">Tmavý</span></button>
   </div>
 </header>
 
 <div class="layout" id="layout" data-view="input">
-  <!-- ZADÁNÍ -->
-  <aside class="side" aria-label="Zadání">
-    <section class="sec">
-      <div class="sec-h"><span class="n">1</span><h2>Plech</h2></div>
-      <div class="seg" role="radiogroup" aria-label="Druh materiálu">
-        <input type="radio" name="mode" id="m-sheet" value="sheet"><label for="m-sheet"><svg viewBox="0 0 24 16" aria-hidden="true"><rect class="ico" x="1.5" y="1.5" width="21" height="13" rx="1"/></svg>Tabule</label>
-        <input type="radio" name="mode" id="m-coil" value="coil"><label for="m-coil"><svg viewBox="0 0 24 16" aria-hidden="true"><circle class="ico" cx="6" cy="8" r="5.5"/><circle class="ico" cx="6" cy="8" r="2"/><path class="ico" d="M6 2.5h16.5v11H6"/></svg>Svitek</label>
-      </div>
-      <div class="row2">
-        <div class="field"><label for="sW" id="sWl">Šířka tabule</label><div class="inp"><input type="text" id="sW" inputmode="decimal" autocomplete="off" placeholder="např. 1250"><span>mm</span></div></div>
-        <div class="field" id="fL"><label for="sL">Délka tabule</label><div class="inp"><input type="text" id="sL" inputmode="decimal" autocomplete="off" placeholder="např. 2500"><span>mm</span></div></div>
-      </div>
-      <div class="presets"><span class="presets-l">Běžné:</span><div class="chips" id="presets" aria-label="Běžné rozměry"></div></div>
-    </section>
-
-    <section class="sec">
-      <div class="sec-h"><span class="n">2</span><h2>Díly</h2><span class="sec-meta" id="pcount"></span></div>
-      <p class="note" id="exNote" hidden><span>Ukázková zakázka – díly uprav ťuknutím.</span><button class="link" type="button" id="clearAll">Začít načisto</button></p>
-      <div class="plist" id="plist"></div>
-      <button class="addbtn" type="button" id="addP"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M10 4v12M4 10h12"/></svg>Přidat díl</button>
-      <p class="hint">Obdélník, trojúhelník, kruh, plášť kužele… nebo vlastní nakreslený tvar.</p>
-    </section>
-
-    <section class="sec">
-      <div class="sec-h"><span class="n">3</span><h2>Řezání</h2></div>
-      <div class="seg" role="radiogroup" aria-label="Způsob řezání">
-        <input type="radio" name="cut" id="c-g" value="g"><label for="c-g">Tabulové nůžky</label>
-        <input type="radio" name="cut" id="c-f" value="f"><label for="c-f">Volný řez</label>
-      </div>
-      <p class="hint" id="cutHint">Nůžky: střih vždy přes celý kus. Volný řez: ruční nůžky, prostřih, laser.</p>
-      <div class="field kerf"><label for="kerf">Mezera mezi díly</label><div class="inp"><input type="text" id="kerf" inputmode="decimal" autocomplete="off" placeholder="0"><span>mm</span></div></div>
-    </section>
-
-    <details class="sec help">
-      <summary>Jak to funguje</summary>
-      <dl>
-        <dt>Obdélníky a tabulové nůžky</dt><dd>Když jsou všechny díly obdélníky, plán dodrží střih vždy přes celý kus a vypíše postup střihu krok za krokem.</dd>
-        <dt>Tvarové díly</dt><dd>Trojúhelníky, kruhy, kužely i nakreslené tvary se skládají do sebe, aby zbylo co nejméně. U každého dílu uvidíš, kde ho na plechu orýsovat.</dd>
-        <dt>Poskládat ručně</dt><dd>Automatický návrh si můžeš upravit: chyť díl prstem nebo myší, posuň ho, otoč ho nebo odlož do zásobníku. Díl se přichytí ke kraji i k sousedům a zčervená, když se překrývá.</dd>
-        <dt>Lze otáčet</dt><dd>Vypni u lakovaného plechu se směrem, u drážkových pásů, nebo když musí díl jít po délce svitku.</dd>
-        <dt>Šířka × délka</dt><dd>Délka dílu leží podél délky tabule nebo svitku. Výkres má délku vodorovně.</dd>
-        <dt>Instalace</dt><dd>Na počítači v Chrome nebo Edge klikni nahoře na „Nainstalovat“. Na Androidu zvol v menu prohlížeče „Přidat na plochu“, na iPhonu v Safari „Sdílet → Přidat na plochu“.</dd>
-      </dl>
-    </details>
-  </aside>
 
   <!-- PLÁN -->
   <main class="main" id="plan" aria-label="Nářezový plán" aria-live="polite">
@@ -96,11 +51,11 @@
         <h2 class="main-title">Nářezový plán</h2>
         <div class="tools" id="tools" hidden>
           <div class="legend">
-            <span><i class="lg-box lg-waste"></i>plech / odpad</span>
-            <span><i class="lg-box lg-off"></i>zbytek k použití</span>
+            <span><i class="lg-box lg-waste"></i>odpad</span>
+            <span><i class="lg-box lg-off"></i>zbytek</span>
             <span id="lgCut"><i class="lg-box lg-cut"></i>střih</span>
           </div>
-          <label class="switch" id="cutsToggle"><input type="checkbox" id="showCuts"><i></i>Čísla střihů</label>
+          <label class="switch sm" id="cutsToggle"><input type="checkbox" id="showCuts"><i></i>Čísla střihů</label>
         </div>
       </div>
       <div id="summary"></div>
@@ -108,6 +63,41 @@
       <div id="sheets" class="sheets"></div>
     </div>
   </main>
+
+  <!-- ZADÁNÍ (vpravo) -->
+  <aside class="side" aria-label="Zadání">
+    <section class="sec">
+      <div class="sec-h"><span class="n">1</span><h2>Plech</h2>
+        <div class="units" id="units" role="radiogroup" aria-label="Jednotky">
+          <button type="button" role="radio" data-u="mm" aria-checked="true">mm</button><button type="button" role="radio" data-u="cm" aria-checked="false">cm</button><button type="button" role="radio" data-u="m" aria-checked="false">m</button>
+        </div>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Druh materiálu">
+        <input type="radio" name="mode" id="m-sheet" value="sheet"><label for="m-sheet"><svg viewBox="0 0 24 16" aria-hidden="true"><rect class="ico" x="1.5" y="1.5" width="21" height="13" rx="1"/></svg>Tabule</label>
+        <input type="radio" name="mode" id="m-coil" value="coil"><label for="m-coil"><svg viewBox="0 0 24 16" aria-hidden="true"><circle class="ico" cx="6" cy="8" r="5.5"/><circle class="ico" cx="6" cy="8" r="2"/><path class="ico" d="M6 2.5h16.5v11H6"/></svg>Svitek</label>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="sW" id="sWl">Šířka</label><div class="inp"><input type="text" id="sW" inputmode="decimal" autocomplete="off"><span class="u-l">mm</span></div></div>
+        <div class="field" id="fL"><label for="sL">Délka</label><div class="inp"><input type="text" id="sL" inputmode="decimal" autocomplete="off"><span class="u-l">mm</span></div></div>
+      </div>
+    </section>
+
+    <section class="sec">
+      <div class="sec-h"><span class="n">2</span><h2>Díly</h2><span class="sec-meta" id="pcount"></span><button type="button" class="clr" id="wipe" hidden>Vymazat vše</button></div>
+      <p class="note" id="exNote" hidden><span>Ukázková zakázka</span><button class="link" type="button" id="clearAll">Začít načisto</button></p>
+      <div class="plist" id="plist"></div>
+      <button class="addbtn" type="button" id="addP"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M10 4v12M4 10h12"/></svg>Přidat díl</button>
+    </section>
+
+    <section class="sec">
+      <div class="sec-h"><span class="n">3</span><h2>Řezání</h2></div>
+      <div class="seg" role="radiogroup" aria-label="Způsob řezání">
+        <input type="radio" name="cut" id="c-g" value="g"><label for="c-g">Tabulové nůžky</label>
+        <input type="radio" name="cut" id="c-f" value="f"><label for="c-f">Volný řez</label>
+      </div>
+      <div class="field kerf"><label for="kerf">Mezera mezi díly</label><div class="inp"><input type="text" id="kerf" inputmode="decimal" autocomplete="off" placeholder="0"><span class="u-l">mm</span></div></div>
+    </section>
+  </aside>
 </div>
 
 <!-- Mobil: záložky -->
@@ -130,10 +120,9 @@
           <div class="pv-info" id="eInfo"></div>
         </div>
         <div class="ed-form">
-          <div class="field"><label for="eName">Název dílu (nepovinné)</label><input type="text" class="plain" id="eName" placeholder="např. Stříška komínu" autocomplete="off"></div>
+          <div class="field"><label for="eName">Název</label><input type="text" class="plain" id="eName" placeholder="např. Stříška komínu" autocomplete="off"></div>
           <div class="ed-fields" id="eFields"></div>
           <div class="ed-draw" id="eDraw" hidden>
-            <p class="hint">Ťukni do mřížky a přidávej body obrysu. Bod můžeš chytit a posunout. Obrys se uzavře sám.</p>
             <div class="chips" id="snapChips"></div>
             <div class="btnrow">
               <button type="button" class="btn ghost sm" id="dUndo">↶ Zpět</button>
@@ -141,13 +130,13 @@
               <button type="button" class="btn ghost sm" id="dClear">Vymazat vše</button>
             </div>
             <div class="side-add">
-              <div class="lbl">Přesně: přidat stranu</div>
+              <div class="lbl">Přidat stranu přesně</div>
               <div class="side-row">
-                <div class="inp"><input type="text" id="sideL" inputmode="decimal" placeholder="délka" aria-label="Délka strany"><span>mm</span></div>
+                <div class="inp"><input type="text" id="sideL" inputmode="decimal" placeholder="délka" aria-label="Délka strany"><span id="sideU">mm</span></div>
                 <div class="inp"><input type="text" id="sideA" inputmode="decimal" placeholder="směr" aria-label="Směr strany ve stupních"><span>°</span></div>
                 <button type="button" class="btn sm" id="sideAdd">Přidat</button>
               </div>
-              <p class="hint">Směr: 0° doprava, 90° nahoru, 180° doleva, 270° dolů.</p>
+              <p class="hint">0° → &nbsp;·&nbsp; 90° ↑ &nbsp;·&nbsp; 180° ← &nbsp;·&nbsp; 270° ↓</p>
             </div>
             <details class="coords"><summary>Souřadnice bodů (<span id="ptCount">0</span>)</summary><div id="coordList"></div></details>
           </div>
@@ -156,7 +145,7 @@
             <div class="field"><span class="lbl">Kusů</span>
               <div class="qty big" role="group" aria-label="Počet kusů"><button type="button" data-q="-1" aria-label="Ubrat kus">−</button><input type="text" id="eQty" inputmode="numeric" aria-label="Počet kusů"><button type="button" data-q="1" aria-label="Přidat kus">+</button></div>
             </div>
-            <label class="switch"><input type="checkbox" id="eRot"><i></i>Lze otáčet</label>
+            <label class="switch" title="Program smí díl při skládání otočit napříč (o 90°). Vypni u plechu se směrem – drážky, lak."><input type="checkbox" id="eRot"><i></i>Může se otočit</label>
           </div>
           <p class="err" id="eErr" hidden></p>
         </div>
