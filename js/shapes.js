@@ -1,6 +1,6 @@
 // Tvary dílů: klempířské šablony + vlastní nakreslený tvar, a geometrie kolem nich.
 // Souřadnice: x doprava (podél DÉLKY plechu), y dolů (přes ŠÍŘKU plechu), vše v mm.
-import { numv, fmt, esc } from './format.js';
+import { numv, lenv, toUnit, fmt, fmtN, U, esc } from './format.js';
 import { polyXform } from './nest-engine.js';
 
 const TAU = Math.PI * 2;
@@ -78,7 +78,7 @@ export const SHAPES = {
     f: [['D', 'Průměr', 300, 'pos', 'mm']],
     poly: (p) => ({ o: circle(p.D / 2, true), holes: [] }),
     sum: (p) => `Ø ${fmt(p.D)}`,
-    info: (p) => [`Průměr ${fmt(p.D)} mm`, `Obvod ${fmt(Math.PI * p.D)} mm`],
+    info: (p) => [`Průměr ${fmt(p.D)} ${U()}`, `Obvod ${fmt(Math.PI * p.D)} ${U()}`],
   },
   ring: {
     n: 'Kroužek',
@@ -86,7 +86,7 @@ export const SHAPES = {
     check: (p) => (p.d >= p.D ? 'Vnitřní průměr musí být menší než vnější.' : null),
     poly: (p) => ({ o: circle(p.D / 2, true), holes: [circle(p.d / 2, false).reverse()] }),
     sum: (p) => `Ø ${fmt(p.D)} / ${fmt(p.d)}`,
-    info: (p) => [`Vnější Ø ${fmt(p.D)} mm, vnitřní Ø ${fmt(p.d)} mm`, `Šířka mezikruží ${fmt((p.D - p.d) / 2)} mm`, 'Do díry se můžou vejít menší díly.'],
+    info: (p) => [`Vnější Ø ${fmt(p.D)} ${U()}, vnitřní Ø ${fmt(p.d)} ${U()}`, `Šířka mezikruží ${fmt((p.D - p.d) / 2)} ${U()}`, 'Do díry se můžou vejít menší díly.'],
   },
   sector: {
     n: 'Kruhová výseč',
@@ -97,8 +97,8 @@ export const SHAPES = {
       const th = p.u * Math.PI / 180;
       return { o: [[0, 0]].concat(arc(0, 0, p.R, Math.PI / 2 - th / 2, Math.PI / 2 + th / 2, true)), holes: [] };
     },
-    sum: (p) => `R ${fmt(p.R)} · ${fmt(p.u)}°`,
-    info: (p) => [`Poloměr ${fmt(p.R)} mm, úhel ${fmt(p.u)}°`, `Délka oblouku ${fmt(p.R * p.u * Math.PI / 180)} mm`],
+    sum: (p) => `R ${fmt(p.R)} · ${fmtN(p.u)}°`,
+    info: (p) => [`Poloměr ${fmt(p.R)} ${U()}, úhel ${fmtN(p.u)}°`, `Délka oblouku ${fmt(p.R * p.u * Math.PI / 180)} ${U()}`],
   },
   cone: {
     n: 'Plášť kužele',
@@ -114,7 +114,7 @@ export const SHAPES = {
     sum: (p) => (p.d > 0 ? `D ${fmt(p.D)} / d ${fmt(p.d)} · v ${fmt(p.v)}` : `D ${fmt(p.D)} · v ${fmt(p.v)}`),
     info: (p) => {
       const { s, R, r, th } = coneGeo(p);
-      return [`Rozvin: R ${fmt(R)} mm${r > 0.05 ? `, r ${fmt(r)} mm` : ''}`, `Úhel výseče ${fmt(th * 180 / Math.PI)}°`, `Délka površky ${fmt(s)} mm`, 'Bez přídavku na spoj – ten přičti k průměru.'];
+      return [`Rozvin: R ${fmt(R)} ${U()}${r > 0.05 ? `, r ${fmt(r)} ${U()}` : ''}`, `Úhel výseče ${fmtN(th * 180 / Math.PI)}°`, `Délka površky ${fmt(s)} ${U()}`, 'Bez přídavku na spoj – ten přičti k průměru.'];
     },
   },
   custom: { n: 'Vlastní tvar', edges: true, custom: true },
@@ -123,7 +123,7 @@ export const SHAPE_ORDER = ['rect', 'bevel', 'trap', 'tri', 'rtri', 'para', 'lsh
 
 export function defaults(t) {
   const d = SHAPES[t]; const p = {};
-  if (d && d.f) for (const f of d.f) p[f[0]] = String(f[2]);
+  if (d && d.f) for (const f of d.f) p[f[0]] = f[4] === '°' ? String(f[2]) : toUnit(f[2]);
   return p;
 }
 
@@ -168,8 +168,9 @@ export function geomOf(pc) {
     if (Math.abs(ringArea(pts)) < 1) return { ok: false, t, name: def.n, err: 'Tvar nemá žádnou plochu.' };
   } else {
     p = {};
-    for (const [k, label, , kind] of def.f) {
-      const v = numv(pc.shape.p?.[k]);
+    for (const [k, label, , kind, un] of def.f) {
+      const raw = pc.shape.p?.[k];
+      const v = un === '°' ? numv(raw) : lenv(raw);
       if (isNaN(v) || (kind === 'pos' && !(v > 0)) || (kind === 'nonneg' && v < 0)) return { ok: false, t, name: def.n, err: `Zkontroluj „${label}“.` };
       p[k] = v;
     }

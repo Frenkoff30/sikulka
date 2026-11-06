@@ -1,6 +1,6 @@
 // Ruční skládání: díly se dají na plechu chytit, posunout, otočit, odložit do zásobníku a zase vrátit.
 // Kontrola překryvu je přesná (podle obrysů), díl se přichytává ke krajům plechu a k sousedním dílům.
-import { $, fmt, esc } from './format.js';
+import { $, fmt, esc, U } from './format.js';
 import { pathD, inside, ringArea } from './shapes.js';
 import { shapeOf } from './render.js';
 
@@ -125,7 +125,7 @@ function draw() {
   for (let x = gs; x < X; x += gs) o.push(`<line x1="${x}" y1="0" x2="${x}" y2="${Y}" class="m-grid"/>`);
   for (let y = gs; y < Y; y += gs) o.push(`<line x1="0" y1="${y}" x2="${X}" y2="${y}" class="m-grid"/>`);
   s.forEach((p, k) => o.push(pieceG(p, k, problemOf(s, k))));
-  o.push(`<text x="${X / 2}" y="${-pad * 0.35}" class="sv-dim" font-size="${fs}" text-anchor="middle">${fmt(X)} mm</text>`);
+  o.push(`<text x="${X / 2}" y="${-pad * 0.35}" class="sv-dim" font-size="${fs}" text-anchor="middle">${fmt(X)} ${U()}</text>`);
   $('mSvg').setAttribute('viewBox', `${-pad} ${-pad} ${X + pad * 2} ${Y + pad * 2}`);
   $('mSvg').innerHTML = o.join('');
   $('mRot').disabled = $('mOut').disabled = M.sel < 0;
@@ -172,7 +172,7 @@ function onMove(e) {
   p.x = x; p.y = y; M.drag.moved = true;
   const el = $('mSvg').querySelector(`[data-k="${M.drag.k}"]`);
   if (el) { el.setAttribute('transform', `translate(${x} ${y})`); el.classList.toggle('bad', !!problemOf(s, M.drag.k)); }
-  msg(`Pozice: od kraje ${fmt(x)} mm, od horní hrany ${fmt(y)} mm`);
+  msg(`Zleva ${fmt(x)} ${U()} · shora ${fmt(y)} ${U()}`);
 }
 function onUp() {
   if (!M.drag) return;

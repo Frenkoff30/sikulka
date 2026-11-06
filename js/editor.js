@@ -1,5 +1,5 @@
 // Editor dílu: výběr klempířské šablony, nebo nakreslení vlastního tvaru bod po bodu.
-import { $, esc, fmt, numv, isExpr } from './format.js';
+import { $, esc, fmt, fmtN, numv, lenv, U, isExpr } from './format.js';
 import { SHAPES, SHAPE_ORDER, defaults, geomOf, iconSVG, pathD, inside } from './shapes.js';
 import { polyXform } from './nest-engine.js';
 
@@ -11,14 +11,13 @@ const SNAPS = [1, 5, 10, 50];
 export function initEditor() {
   $('tpls').innerHTML = SHAPE_ORDER.map((t) => `<button type="button" class="tpl" role="radio" data-t="${t}" aria-checked="false">${iconSVG(t)}<span>${SHAPES[t].n}</span></button>`).join('');
   $('tpls').addEventListener('click', (e) => { const b = e.target.closest('.tpl'); if (b) switchTemplate(b.dataset.t); });
-  $('snapChips').innerHTML = SNAPS.map((s) => `<button type="button" class="chip" data-s="${s}">mřížka ${s} mm</button>`).join('');
   $('snapChips').addEventListener('click', (e) => { const b = e.target.closest('.chip'); if (!b) return; ed.snap = +b.dataset.s; syncSnap(); renderDraw(); });
 
   $('eFields').addEventListener('input', (e) => {
     const k = e.target.dataset.k; if (!k) return;
     ed.d.shape.p[k] = e.target.value;
-    const v = numv(e.target.value);
-    const eq = $('eq-' + k); if (eq) eq.textContent = isExpr(e.target.value) && !isNaN(v) ? '= ' + fmt(v) : '';
+    const ang = k === 'u', v = ang ? numv(e.target.value) : lenv(e.target.value);
+    const eq = $('eq-' + k); if (eq) eq.textContent = isExpr(e.target.value) && !isNaN(v) ? '= ' + (ang ? fmtN(v) : fmt(v)) : '';
     renderPreview();
   });
   $('eName').addEventListener('input', (e) => { ed.d.name = e.target.value; });
@@ -55,7 +54,7 @@ export function initEditor() {
   $('sideA').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSide(); } });
   $('coordList').addEventListener('input', (e) => {
     const i = +e.target.dataset.i, c = e.target.dataset.c; if (isNaN(i) || !c) return;
-    const v = numv(e.target.value); if (isNaN(v)) return;
+    const v = lenv(e.target.value); if (isNaN(v)) return;
     ed.d.shape.pts[i][c === 'x' ? 0 : 1] = Math.max(0, v); renderDraw(); renderCustomInfo();
   });
   $('coordList').addEventListener('click', (e) => {
@@ -66,6 +65,8 @@ export function initEditor() {
 
 export function openEditor(piece, idx, callbacks) {
   cb = callbacks;
+  $('snapChips').innerHTML = SNAPS.map((s) => `<button type="button" class="chip" data-s="${s}">mřížka ${fmt(s)} ${U()}</button>`).join('');
+  $('sideU').textContent = U();
   const src = piece ? JSON.parse(JSON.stringify(piece)) : { name: '', q: '1', rot: true, shape: { t: lastT, p: defaults(lastT), pts: [] } };
   if (!src.shape.p) src.shape.p = defaults(src.shape.t);
   if (!src.shape.pts) src.shape.pts = [];
@@ -117,9 +118,9 @@ function renderForm() {
   $('toCustom').hidden = custom || !def.edges;
   if (custom) { syncSnap(); redrawCustom(); return; }
   $('eFields').innerHTML = def.f.map(([k, label, , , unit]) => {
-    const v = ed.d.shape.p[k] ?? ''; const n = numv(v);
+    const v = ed.d.shape.p[k] ?? ''; const n = unit === '°' ? numv(v) : lenv(v);
     const kb = t === 'rect' && k === 'w' ? '' : ' inputmode="decimal"';
-    return `<div class="field"><label for="ef-${k}">${label}</label><div class="inp"><input type="text" id="ef-${k}" data-k="${k}" value="${esc(v)}"${kb} autocomplete="off"><span>${unit}</span></div><div class="eq" id="eq-${k}">${isExpr(v) && !isNaN(n) ? '= ' + fmt(n) : ''}</div></div>`;
+    return `<div class="field"><label for="ef-${k}">${label}</label><div class="inp"><input type="text" id="ef-${k}" data-k="${k}" value="${esc(v)}"${kb} autocomplete="off"><span>${unit === '°' ? '°' : U()}</span></div><div class="eq" id="eq-${k}">${isExpr(v) && !isNaN(n) ? '= ' + (unit === '°' ? fmtN(n) : fmt(n)) : ''}</div></div>`;
   }).join('') + (t === 'rect' ? `<p class="hint">Šířku můžeš zadat jako <b>rozvin</b>: 20+120+150+20</p>` : '');
   renderPreview();
 }
@@ -134,7 +135,7 @@ function renderPreview() {
   $('eErr').hidden = true;
   $('ePrev').innerHTML = shapeSVG(g, SHAPES[ed.d.shape.t].edges);
   const def = SHAPES[ed.d.shape.t];
-  const lines = (def.info ? def.info(g.p) : []).concat([`Zabere obdélník ${fmt(g.bh)} × ${fmt(g.bw)} mm · plocha ${(g.area / 1e6).toLocaleString('cs-CZ', { maximumFractionDigits: 3 })} m²`]);
+  const lines = (def.info ? def.info(g.p) : []).concat([`Zabere ${fmt(g.bh)} × ${fmt(g.bw)} ${U()} · ${(g.area / 1e6).toLocaleString('cs-CZ', { maximumFractionDigits: 3 })} m²`]);
   $('eInfo').innerHTML = lines.map((l) => `<span>${esc(l)}</span>`).join('');
 }
 
@@ -188,7 +189,7 @@ function renderDraw() {
     o.push(`<circle cx="${p[0]}" cy="${p[1]}" r="${i === ed.sel ? r * 1.5 : r}" class="${i === ed.sel ? 'dr-v sel' : 'dr-v'}" vector-effect="non-scaling-stroke"/>`);
     o.push(`<text x="${p[0] + r * 1.6}" y="${p[1] - r * 1.6}" class="dr-n" font-size="${fs * 0.8}">${i + 1}</text>`);
   });
-  if (!pts.length) o.push(`<text x="${W / 2}" y="${H / 2}" class="dr-hint" font-size="${fs * 1.3}" text-anchor="middle">Ťukni sem a začni kreslit obrys</text>`);
+  if (!pts.length) o.push(`<text x="${W / 2}" y="${H / 2}" class="dr-hint" font-size="${fs * 1.3}" text-anchor="middle">Ťukni sem a kresli obrys</text>`);
   svg.setAttribute('viewBox', `${-pad * 2.2} ${-pad * 1.4} ${W + pad * 3.4} ${H + pad * 2.6}`);
   svg.innerHTML = o.join('');
 }
@@ -205,7 +206,7 @@ function renderCoords() {
 function renderCustomInfo() {
   const g = geomOf(ed.d);
   $('eInfo').innerHTML = g.ok
-    ? `<span>Zabere obdélník ${fmt(g.bh)} × ${fmt(g.bw)} mm · plocha ${(g.area / 1e6).toLocaleString('cs-CZ', { maximumFractionDigits: 3 })} m²</span>`
+    ? `<span>Zabere ${fmt(g.bh)} × ${fmt(g.bw)} ${U()} · ${(g.area / 1e6).toLocaleString('cs-CZ', { maximumFractionDigits: 3 })} m²</span>`
     : `<span>${esc(g.err)}</span>`;
 }
 
@@ -243,7 +244,7 @@ function onMove(e) {
 function onUp() { if (!ed || ed.drag < 0) return; ed.drag = -1; renderCoords(); renderCustomInfo(); }
 
 function addSide() {
-  const L = numv($('sideL').value), A = numv($('sideA').value || '0');
+  const L = lenv($('sideL').value), A = numv($('sideA').value || '0');
   if (!(L > 0) || isNaN(A)) { $('sideL').focus(); return; }
   const pts = ed.d.shape.pts; pushHist();
   if (!pts.length) pts.push([0, 0]);

@@ -1,5 +1,5 @@
 // Nářez plechu – hlavní logika aplikace: zadání, seznam dílů, výpočet, zakázky, instalace.
-import { $, esc, fmt, numv, plural } from './format.js';
+import { $, esc, fmt, numv, lenv, toUnit, setUnit, U, UNITS, plural } from './format.js';
 import { SHAPES, defaults, geomOf, thumbSVG } from './shapes.js';
 import { buildConfigs, runRect, evalRect, cmp, mutate, EPS } from './rect-engine.js';
 import { NestSolver } from './nest-engine.js';
@@ -11,7 +11,7 @@ import { openManual } from './manual.js';
 const KEY = 'narez-plechu-v2', KEY_V1 = 'narez-plechu-v1', JOBS = 'narez-zakazky-v1', THEME = 'narez-vzhled-v2';
 const pc = (name, t, p, q, rot = true) => ({ name, q: String(q), rot, shape: { t, p: Object.assign(defaults(t), p), pts: [] } });
 const example = () => ({
-  mode: 'sheet', W: '1250', L: '2500', cut: 'g', kerf: '0', showCuts: true, example: true, manual: null,
+  unit: 'mm', mode: 'sheet', W: '1250', L: '2500', cut: 'g', kerf: '0', showCuts: true, example: true, manual: null,
   pieces: [
     pc('Lemovka', 'rect', { w: '150', l: '2000' }, 2),
     pc('Oplechování římsy', 'bevel', { w: '250', L1: '1200', L2: '950' }, 2),
@@ -35,9 +35,12 @@ function loadState() {
       pieces: v1.pieces.map((p) => ({ name: p.name || '', q: p.q || '1', rot: p.rot !== false, shape: { t: 'rect', p: { w: p.w || '', l: p.l || '' }, pts: [] } })),
     });
   }
-  return example();
+  // první spuštění: prázdná pracovní plocha
+  return Object.assign(example(), { pieces: [], example: false });
 }
 let state = loadState();
+if (!UNITS[state.unit]) state.unit = 'mm';
+setUnit(state.unit);
 const save = () => store.set(KEY, state);
 
 /* ---------- motiv ---------- */
@@ -47,44 +50,63 @@ function applyTheme() {
   document.documentElement.dataset.theme = t;
   $('btnTheme').setAttribute('aria-label', t === 'dark' ? 'Přepnout na světlý vzhled' : 'Přepnout na tmavý vzhled');
   $('btnTheme').title = $('btnTheme').getAttribute('aria-label');
+  $('themeL').textContent = t === 'dark' ? 'Světlý' : 'Tmavý';
 }
 $('btnTheme').addEventListener('click', () => { store.set(THEME, store.get(THEME) === 'dark' ? 'light' : 'dark'); applyTheme(); });
 
+/* ---------- jednotky ---------- */
+// Všechny délky v zadání jsou uložené v jednotce zakázky. Při přepnutí se přepočítají.
+const lenKeys = (p) => (SHAPES[p.shape?.t]?.f || []).filter((f) => f[4] !== '°').map((f) => f[0]);
+function convertUnit(to) {
+  const from = state.unit; if (from === to) return;
+  const cv = (v) => { const mm = lenv(v, from); return isNaN(mm) ? v : toUnit(mm, to); };
+  state.W = cv(state.W); state.L = cv(state.L);
+  if (String(state.kerf ?? '').trim() !== '') state.kerf = cv(state.kerf);
+  for (const p of state.pieces) for (const k of lenKeys(p)) if (p.shape.p && k in p.shape.p) p.shape.p[k] = cv(p.shape.p[k]);
+  state.unit = to; setUnit(to);
+}
+function syncUnits() {
+  document.querySelectorAll('#units [data-u]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.u === state.unit)));
+  document.querySelectorAll('.u-l').forEach((e) => { e.textContent = U(); });
+}
+$('units').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-u]'); if (!b || b.dataset.u === state.unit) return;
+  convertUnit(b.dataset.u); renderStatic(); renderPieces(); save();
+  // plán zůstává stejný, jen se přepíšou čísla do nové jednotky
+  if (!shown) return schedule();
+  const P = shown.P;
+  for (const v of Object.values(P.byPi)) { const g = geomOf(state.pieces[v.pi]); if (g.ok) v.sum = g.sum; }
+  for (const v of P.invalid || []) { const g = geomOf(state.pieces[v.pi]); if (g.ok) v.sum = g.sum; }
+  renderWarns(P); rerender();
+});
+function rerender() {
+  if (!shown) return;
+  if (shown.kind === 'rect') renderRect(shown.best, shown.P, !!shown.running, { showCuts: state.showCuts });
+  else renderLayout(shown.L, shown.P, !!shown.running);
+}
+
 /* ---------- materiál a řezání ---------- */
-const PRESETS = { sheet: [[1000, 2000], [1250, 2500], [1500, 3000], [1000, 1000]], coil: [500, 625, 670, 1000, 1250] };
 function renderStatic() {
   $('m-' + state.mode).checked = true;
   $('c-' + state.cut).checked = true;
   $('sW').value = state.W; $('sL').value = state.L; $('kerf').value = state.kerf;
   $('showCuts').checked = !!state.showCuts;
-  syncMode();
+  ['sW', 'sL', 'kerf'].forEach((id) => $(id).classList.remove('bad'));
+  syncUnits(); syncMode();
 }
 function syncMode() {
   const coil = state.mode === 'coil';
   $('fL').hidden = coil;
-  $('sWl').textContent = coil ? 'Šířka svitku' : 'Šířka tabule';
-  renderPresets();
-}
-function renderPresets() {
-  const coil = state.mode === 'coil', W = numv(state.W), L = numv(state.L);
-  $('presets').innerHTML = (coil
-    ? PRESETS.coil.map((w) => `<button type="button" class="chip" data-w="${w}" aria-pressed="${W === w}">${fmt(w)}</button>`)
-    : PRESETS.sheet.map(([w, l]) => `<button type="button" class="chip" data-w="${w}" data-l="${l}" aria-pressed="${W === w && L === l}">${fmt(w)} × ${fmt(l)}</button>`)).join('');
+  $('sWl').textContent = coil ? 'Šířka svitku' : 'Šířka';
 }
 [['sW', 'W'], ['sL', 'L'], ['kerf', 'kerf']].forEach(([id, k]) => $(id).addEventListener('input', (e) => {
   state[k] = e.target.value; const v = numv(e.target.value);
   e.target.classList.toggle('bad', k === 'kerf' ? (e.target.value.trim() !== '' && !(v >= 0)) : !(v > 0));
-  renderPresets(); schedule();
+  schedule();
 }));
 document.querySelectorAll('input[name=mode]').forEach((r) => r.addEventListener('change', () => { state.mode = r.value; syncMode(); schedule(); }));
 document.querySelectorAll('input[name=cut]').forEach((r) => r.addEventListener('change', () => { state.cut = r.value; schedule(); }));
-$('presets').addEventListener('click', (e) => {
-  const b = e.target.closest('.chip'); if (!b) return;
-  state.W = b.dataset.w; $('sW').value = state.W; $('sW').classList.remove('bad');
-  if (b.dataset.l) { state.L = b.dataset.l; $('sL').value = state.L; $('sL').classList.remove('bad'); }
-  renderPresets(); schedule();
-});
-$('showCuts').addEventListener('change', (e) => { state.showCuts = e.target.checked; save(); if (shown?.kind === 'rect') renderRect(shown.best, shown.P, false, { showCuts: state.showCuts }); });
+$('showCuts').addEventListener('change', (e) => { state.showCuts = e.target.checked; save(); if (shown?.kind === 'rect') rerender(); });
 
 /* ---------- seznam dílů ---------- */
 function renderPieces() {
@@ -93,13 +115,14 @@ function renderPieces() {
     return `<div class="pcard${g.ok ? '' : ' bad'}" data-i="${i}">
   <button type="button" class="thumb" data-act="edit" aria-label="Upravit díl ${i + 1}">${g.ok ? thumbSVG(g.poly, i, 52) : '<span class="thumb-x">?</span>'}</button>
   <button type="button" class="pinfo" data-act="edit" title="${esc((p.name ? p.name + ' – ' : '') + def.n)}"><b>${esc(p.name || def.n)}</b><span>${g.ok ? `<span class="mono">${esc(g.sum)}</span>` : esc(g.err)}</span></button>
-  <label class="switch sm"><input type="checkbox" data-f="rot" ${p.rot ? 'checked' : ''}><i></i>lze otáčet</label>
+  <label class="switch sm" title="Program smí díl při skládání otočit napříč (o 90°). Vypni u plechu se směrem – drážky, lak."><input type="checkbox" data-f="rot" ${p.rot ? 'checked' : ''}><i></i>může se otočit</label>
   <div class="qty" role="group" aria-label="Počet kusů"><button type="button" data-act="minus" aria-label="Ubrat kus">−</button><input type="text" inputmode="numeric" data-f="q" value="${esc(p.q)}" aria-label="Počet kusů dílu ${i + 1}"><button type="button" data-act="plus" aria-label="Přidat kus">+</button></div>
   <button type="button" class="del" data-act="del" aria-label="Smazat díl ${i + 1}" title="Smazat">✕</button>
 </div>`;
   }).join('');
-  $('plist').innerHTML = list || `<div class="plist-empty">Zatím žádné díly. Přidej první tlačítkem níže.</div>`;
+  $('plist').innerHTML = list || `<div class="plist-empty">Zatím žádné díly</div>`;
   $('exNote').hidden = !state.example;
+  $('wipe').hidden = !state.pieces.length;
   const n = state.pieces.reduce((s, p) => s + (parseInt(numv(p.q), 10) || 0), 0);
   $('pcount').textContent = state.pieces.length ? `${n} ${plural(n, 'kus', 'kusy', 'kusů')}` : '';
   renderJobName();
@@ -159,16 +182,24 @@ function editPiece(i) {
   });
 }
 $('addP').addEventListener('click', () => editPiece(-1));
+$('wipe').addEventListener('click', () => {
+  const old = JSON.parse(JSON.stringify(state));
+  state.pieces = []; state.example = false; state.manual = null; state.jobName = '';
+  renderPieces(); schedule();
+  toast('Všechny díly smazány.', () => { state = old; setUnit(state.unit); renderStatic(); renderPieces(); schedule(); });
+});
 $('clearAll').addEventListener('click', () => { state.pieces = []; state.example = false; state.manual = null; renderPieces(); schedule(); editPiece(-1); });
 
 /* ---------- zadání → úloha ---------- */
 function signature() {
-  return JSON.stringify([state.mode, state.W, state.mode === 'coil' ? '' : state.L, state.kerf, state.pieces.map((p) => [p.q, !!p.rot, p.shape.t, p.shape.t === 'custom' ? p.shape.pts : p.shape.p])]);
+  // v mm, aby přepnutí jednotek nezahodilo ruční rozložení
+  const mmP = (p) => Object.fromEntries(Object.entries(p.shape.p || {}).map(([k, v]) => [k, lenKeys(p).includes(k) ? lenv(v) : numv(v)]));
+  return JSON.stringify([state.mode, lenv(state.W), state.mode === 'coil' ? '' : lenv(state.L), lenv(state.kerf), state.pieces.map((p) => [p.q, !!p.rot, p.shape.t, p.shape.t === 'custom' ? p.shape.pts : mmP(p)])]);
 }
 function makeProblem() {
   const coil = state.mode === 'coil';
-  const Y = numv(state.W); let X = coil ? Infinity : numv(state.L);
-  const kv = numv(state.kerf), kerf = kv > 0 ? kv : 0;
+  const Y = lenv(state.W); let X = coil ? Infinity : lenv(state.L);
+  const kv = lenv(state.kerf), kerf = kv > 0 ? kv : 0;
   const errs = [], invalid = [], bad = [], byPi = {}, valid = [];
   if (!(Y > 0)) errs.push(coil ? 'Zadej šířku svitku.' : 'Zadej šířku tabule.');
   if (!coil && !(X > 0)) errs.push('Zadej délku tabule.');
@@ -237,12 +268,12 @@ function solveRect(P, id) {
     }
     const now = performance.now(), done = !queue.length && (now - t0 > budget || n <= 1);
     best.tried = tried;
-    if (done) { shown = { kind: 'rect', best, P }; renderRect(best, P, false, opts); return; }
-    if (dirty && now - lastRender > 250) { lastRender = now; dirty = false; shown = { kind: 'rect', best, P }; renderRect(best, P, true, opts); }
-    else updateStatus(true, tried);
+    if (done) { shown = { kind: 'rect', best, P, running: false }; renderRect(best, P, false, opts); return; }
+    if (dirty && now - lastRender > 250) { lastRender = now; dirty = false; shown = { kind: 'rect', best, P, running: true }; renderRect(best, P, true, opts); }
+    else updateStatus(true);
     setTimeout(step, 0);
   };
-  updateStatus(true, 0);
+  updateStatus(true);
   setTimeout(step, 0);
 }
 
@@ -250,7 +281,7 @@ function solveNest(P, id) {
   const onSnap = (snap) => {
     if (id !== job) return;
     const L = layoutFromSnap(snap), done = snap.t === 'done';
-    shown = { kind: 'layout', L, P };
+    shown = { kind: 'layout', L, P, running: !done };
     renderLayout(L, P, !done);
   };
   const fallback = () => {
@@ -296,7 +327,15 @@ $('sheets').addEventListener('click', (e) => {
     save(); showManual(P); toast('Ruční rozložení uloženo.');
   });
 });
-$('summary').addEventListener('click', (e) => { if (e.target.id === 'backAuto') { state.manual = null; save(); solve(); } });
+$('summary').addEventListener('click', (e) => {
+  const id = e.target.closest('button')?.id;
+  if (id === 'backAuto') { state.manual = null; save(); solve(); }
+  else if (id === 'emptyAdd') editPiece(-1);
+  else if (id === 'loadEx') {
+    const u = state.unit; state = example(); setUnit('mm'); convertUnit(u);
+    renderStatic(); renderPieces(); schedule();
+  }
+});
 
 /* ---------- zakázky ---------- */
 function jobs() { return store.get(JOBS) || []; }
@@ -304,7 +343,7 @@ function renderJobs() {
   const list = jobs();
   $('jobList').innerHTML = list.length ? list.map((j, k) => {
     const n = j.data.pieces.length;
-    return `<div class="job"><div><b>${esc(j.name)}</b><span class="hint">${new Date(j.date).toLocaleDateString('cs-CZ')} · ${n} ${plural(n, 'díl', 'díly', 'dílů')} · ${j.data.mode === 'coil' ? 'svitek ' + esc(j.data.W) : esc(j.data.W) + ' × ' + esc(j.data.L)}</span></div>
+    return `<div class="job"><div><b>${esc(j.name)}</b><span class="hint">${new Date(j.date).toLocaleDateString('cs-CZ')} · ${n} ${plural(n, 'díl', 'díly', 'dílů')} · ${j.data.mode === 'coil' ? 'svitek ' + esc(j.data.W) : esc(j.data.W) + ' × ' + esc(j.data.L)} ${esc(j.data.unit || 'mm')}</span></div>
       <button type="button" class="btn ghost sm" data-open="${k}">Otevřít</button><button type="button" class="del" data-jdel="${k}" aria-label="Smazat zakázku ${esc(j.name)}">✕</button></div>`;
   }).join('') : '<p class="hint">Zatím žádné uložené zakázky.</p>';
 }
@@ -325,11 +364,11 @@ $('jobForm').addEventListener('submit', (e) => {
 $('jobList').addEventListener('click', (e) => {
   const o = e.target.closest('[data-open]'), d = e.target.closest('[data-jdel]');
   const list = jobs();
-  if (o) { state = JSON.parse(JSON.stringify(list[+o.dataset.open].data)); state.example = false; state.jobName = list[+o.dataset.open].name; renderStatic(); renderPieces(); schedule(); closeJobs(); toast(`Otevřena zakázka „${list[+o.dataset.open].name}“.`); }
+  if (o) { state = JSON.parse(JSON.stringify(list[+o.dataset.open].data)); state.example = false; if (!UNITS[state.unit]) state.unit = 'mm'; setUnit(state.unit); state.jobName = list[+o.dataset.open].name; renderStatic(); renderPieces(); schedule(); closeJobs(); toast(`Otevřena zakázka „${list[+o.dataset.open].name}“.`); }
   if (d) { const [rm] = list.splice(+d.dataset.jdel, 1); store.set(JOBS, list); renderJobs(); toast(`Zakázka „${rm.name}“ smazána.`, () => { const l = jobs(); l.splice(+d.dataset.jdel, 0, rm); store.set(JOBS, l); renderJobs(); }); }
 });
 $('jobNew').addEventListener('click', () => {
-  state = Object.assign(example(), { pieces: [], example: false, jobName: '', W: state.W, L: state.L, mode: state.mode, cut: state.cut, kerf: state.kerf });
+  state = Object.assign(example(), { pieces: [], example: false, jobName: '', unit: state.unit, W: state.W, L: state.L, mode: state.mode, cut: state.cut, kerf: state.kerf });
   renderStatic(); renderPieces(); schedule(); closeJobs(); editPiece(-1);
 });
 
