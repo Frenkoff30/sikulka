@@ -9,9 +9,9 @@
   --panel: #ffffff;       /* panely a karty */
   --field: #ffffff;       /* pole formulářů */
   --track: #eef1f4;       /* podklad přepínačů */
-  --ink: #1e2a33;         /* antracit */
-  --muted: #5a6670;
-  --faint: #929da6;
+  --ink: #0d1216;         /* skoro černá – dobře čitelná */
+  --muted: #2b353c;       /* doplňkový text, pořád tmavý */
+  --faint: #5c6870;
   --line: #e6eaee;
   --line-2: #d3dae0;
   --paper: #fafbfc;       /* podklad výkresu */
@@ -211,7 +211,7 @@ input[type=text].bad { border-color: var(--danger); background: var(--danger-sof
 .pinfo { grid-area: i; text-align: left; background: none; border: none; padding: 0; cursor: pointer; display: grid; gap: 0; min-width: 0; align-self: end; }
 .pinfo b { font-weight: 600; font-size: 13px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .pcard .del { width: 29px; height: 29px; }
-.pinfo > span { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pinfo > span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pinfo:hover b { color: var(--accent); }
 .pcard.bad .pinfo > span { color: var(--danger); }
 .pcard .switch { grid-area: r; align-self: start; white-space: nowrap; }
@@ -334,12 +334,15 @@ details.cuts li::before { content: counter(st); position: absolute; left: 0; top
 .sv-steel { fill: var(--steel); }
 .sv-off { fill: var(--steel-off); stroke: var(--steel-edge); stroke-width: 1.5; stroke-dasharray: 8 5; }
 .sv-piece { stroke: var(--pstroke); stroke-width: 1.6; stroke-linejoin: round; }
-.sv-t { fill: #15212a; font-family: var(--f-mono); font-weight: 500; }
-.sv-tn { fill: #15212a; font-family: var(--f-body); font-weight: 700; }
+.sv-t { fill: #000000; font-family: var(--f-mono); font-weight: 500; }
+.sv-tn { fill: #000000; font-family: var(--f-body); font-weight: 700; }
 .sv-to { fill: var(--steel-edge); font-family: var(--f-mono); font-weight: 500; }
 .sv-ton { font-family: var(--f-body); font-weight: 700; letter-spacing: .08em; }
 .sv-ta { font-weight: 700; }
 :root[data-theme="dark"] :is(.sv-t, .sv-tn, .m-lbl) { fill: var(--ink); }
+/* světlý režim: popisky ve výkresu černé */
+:root:not([data-theme="dark"]) :is(.sv-to, .sv-dim) { fill: #000000; }
+:root:not([data-theme="dark"]) .m-lbl { fill: #000000; }
 .sv-cut { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 7 4; }
 .sv-bd { fill: var(--accent); }
 .sv-bt { fill: var(--on-accent); font-family: var(--f-mono); font-weight: 600; }
