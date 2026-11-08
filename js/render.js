@@ -1,7 +1,7 @@
 // Vykreslení výsledků: souhrn, výkresy tabulí (SVG), postup střihu, rozměření dílů.
 import { fmt, m2, pct, plural, esc, $, U } from './format.js';
 import { polyXform } from './nest-engine.js';
-import { pathD, labelSpot, profileSVG } from './shapes.js';
+import { pathD, labelSpot, profileSVG, mirrorPoly } from './shapes.js';
 import { EPS, coilExact } from './rect-engine.js';
 
 let uid = 0;
@@ -218,11 +218,12 @@ function rectSVG(s, P, X, nums, showCuts) {
 }
 
 /* ---------- TVARY (nesting) ---------- */
-function xf(P, i, deg) {
+// m = díl je ručně převrácený zrcadlově (nejdřív zrcadlení, pak otočení o deg)
+function xf(P, i, deg, m) {
   P._xf = P._xf || new Map();
-  const key = i + '|' + deg;
+  const key = i + '|' + deg + (m ? '|m' : '');
   let v = P._xf.get(key);
-  if (!v) { const t = polyXform(P.J.parts[i].poly, deg); v = { t, spot: labelSpot(t) }; P._xf.set(key, v); }
+  if (!v) { const poly = P.J.parts[i].poly; const t = polyXform(m ? mirrorPoly(poly) : poly, deg); v = { t, spot: labelSpot(t) }; P._xf.set(key, v); }
   return v;
 }
 
@@ -242,17 +243,17 @@ export function layoutFromRect(best, P) {
     unplaced: res.unplaced.map((it) => idx.get(it.pi)), tried: best.tried, cell: 0,
   };
 }
-export const shapeOf = (P, i, deg) => xf(P, i, deg);
+export const shapeOf = (P, i, deg, m) => xf(P, i, deg, m);
 
 export function renderLayout(L, P, running) {
   const J = P.J;
-  const exts = L.sheets.map((s) => s.reduce((m, p) => Math.max(m, p.x + xf(P, p.i, p.deg).t.w), 0));
+  const exts = L.sheets.map((s) => s.reduce((m, p) => Math.max(m, p.x + xf(P, p.i, p.deg, p.m).t.w), 0));
   let X = J.X;
   if (P.coil) X = Math.max(1, ...exts);
   let pieceArea = 0, count = 0;
   for (const s of L.sheets) for (const p of s) { pieceArea += J.parts[p.i].area; count++; }
   const nS = L.sheets.length, total = P.coil ? X * P.Y : nS * X * P.Y;
-  const sig = (s) => s.map((p) => `${p.i},${p.deg},${Math.round(p.x)},${Math.round(p.y)}`).sort().join('|');
+  const sig = (s) => s.map((p) => `${p.i},${p.deg},${p.m ? 1 : 0},${Math.round(p.x)},${Math.round(p.y)}`).sort().join('|');
   const sheets = L.sheets.map((s, k) => ({ placed: s, ext: exts[k] }));
   const groups = groupSheets(sheets, (s) => sig(s.placed));
   // volný plech mezi díly a za nimi → použitelné zbytky
@@ -274,7 +275,7 @@ function freeRects(placed, P, X) {
   const g = new Uint8Array(cols * rows);
   const mark = (x, y) => { const i = Math.floor(x / c), j = Math.floor(y / c); if (i >= 0 && j >= 0 && i < cols && j < rows) g[j * cols + i] = 1; };
   for (const p of placed) {
-    const { t } = xf(P, p.i, p.deg);
+    const { t } = xf(P, p.i, p.deg, p.m);
     const rings = [t.o].concat(t.holes).map((r) => r.map((q) => [q[0] + p.x, q[1] + p.y]));
     // obrys dílu
     for (const r of rings) for (let k = 0; k < r.length; k++) {
@@ -376,15 +377,15 @@ function nestCard(g, P, X, running) {
   const pos = s.placed.map((p) => ({ ...p, ox: p.x, oy: p.y })).sort((a, b) => a.ox - b.ox || a.oy - b.oy);
   const labels = [];
   pos.forEach((p, k) => {
-    const { t, spot } = xf(P, p.i, p.deg);
+    const { t, spot } = xf(P, p.i, p.deg, p.m);
     const info = P.byPi[J.parts[p.i].pi]; pa += J.parts[p.i].area; p.info = info;
     o.push(`<path d="${pathD([t.o].concat(t.holes), p.ox, p.oy)}" fill-rule="evenodd" class="sv-piece" style="fill:var(--p${info.ci})" vector-effect="non-scaling-stroke"/>`);
     o.push(bendLines(info, p.deg, p.ox, p.oy));
-    labels.push(fitText([`${k + 1}. ${info.name || info.shapeName}`, info.sum], p.ox + spot.x, p.oy + spot.y, spot.aw, spot.ah, fs * 0.8, minF, 'sv-t', 'sv-tn', [String(k + 1)]));
+    labels.push(fitText([`${k + 1}. ${info.name || info.shapeName}${p.m ? ' ⇋' : ''}`, p.m ? `${info.sum} · zrcadlově` : info.sum], p.ox + spot.x, p.oy + spot.y, spot.aw, spot.ah, fs * 0.8, minF, 'sv-t', 'sv-tn', [String(k + 1)]));
   });
   o.push(labels.join(''));
   o.push(frame(X, Y, P.coil, fs * 0.8, pad));
-  const rows = pos.map((p, k) => `<tr><td class="n">${k + 1}</td><td class="d">${pc(p.info.ci)}<b>${esc(p.info.name || p.info.shapeName)}</b><span class="mono">${esc(p.info.sum)}</span></td><td class="mm">${fmt(p.ox)}</td><td class="mm">${fmt(p.oy)}</td><td class="r">${p.deg ? `o ${p.deg}°` : 'ne'}</td></tr>`).join('');
+  const rows = pos.map((p, k) => `<tr><td class="n">${k + 1}</td><td class="d">${pc(p.info.ci)}<b>${esc(p.info.name || p.info.shapeName)}</b><span class="mono">${esc(p.info.sum)}</span></td><td class="mm">${fmt(p.ox)}</td><td class="mm">${fmt(p.oy)}</td><td class="r">${[p.deg ? `o ${p.deg}°` : '', p.m ? 'zrcadlově' : ''].filter(Boolean).join(', ') || 'ne'}</td></tr>`).join('');
   const meta = `${pct(pa / (X * Y))} využito · zbyde ${m2(Math.max(0, X * Y - pa))} m²`;
   return `<article class="sheet">${cardHead(g, P, meta, running)}<div class="svgbox">${svgWrap(X, Y, pad, o.join(''))}</div>`
     + `<details class="cuts"><summary>Pozice dílů na plechu <span class="cnt">${s.placed.length}</span></summary><div class="tabwrap"><table class="postab"><thead><tr><th>#</th><th>Díl</th><th class="mm" title="Vzdálenost od levé hrany plechu k dílu">Od levé hrany (${U()})</th><th class="mm" title="Vzdálenost od horní hrany plechu k dílu">Od horní hrany (${U()})</th><th class="r" title="O kolik je díl na plechu otočený proti tomu, jak jsi ho zadal">Otočený</th></tr></thead><tbody>${rows}</tbody></table></div></details></article>`;

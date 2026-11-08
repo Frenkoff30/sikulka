@@ -320,7 +320,7 @@ function showManual(P) {
   const idx = new Map(P.J.parts.map((p, i) => [p.pi, i]));
   const L = {
     manual: true, tried: 0, cell: 0,
-    sheets: state.manual.sheets.map((s) => s.map(([pi, deg, x, y]) => ({ i: idx.get(pi), deg, x, y }))),
+    sheets: state.manual.sheets.map((s) => s.map(([pi, deg, x, y, m]) => ({ i: idx.get(pi), deg, x, y, m: !!m }))),
     unplaced: state.manual.tray.map((pi) => idx.get(pi)),
   };
   shown = { kind: 'layout', L, P };
@@ -333,7 +333,7 @@ $('sheets').addEventListener('click', (e) => {
   openManual(P, L, +b.dataset.manual, (res) => {
     state.manual = {
       sig: P.sig,
-      sheets: res.sheets.map((s) => s.map((p) => [P.J.parts[p.i].pi, p.deg, Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10])),
+      sheets: res.sheets.map((s) => s.map((p) => [P.J.parts[p.i].pi, p.deg, Math.round(p.x * 10) / 10, Math.round(p.y * 10) / 10, p.m ? 1 : 0])),
       tray: res.unplaced.map((i) => P.J.parts[i].pi),
     };
     save(); showManual(P); toast('Ruční rozložení uloženo.');

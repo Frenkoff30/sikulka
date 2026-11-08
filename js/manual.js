@@ -1,17 +1,17 @@
 // Ruční skládání: díly se dají na plechu chytit, posunout, otočit, odložit do zásobníku a zase vrátit.
 // Kontrola překryvu je přesná (podle obrysů), díl se přichytává ke krajům plechu a k sousedním dílům.
 import { $, fmt, esc, U } from './format.js';
-import { pathD, inside, ringArea } from './shapes.js';
+import { pathD, inside, ringArea, isSymmetric } from './shapes.js';
 import { shapeOf } from './render.js';
 
 let M = null;
 
 /* ---------- geometrie pro kontrolu překryvu ---------- */
-function geo(i, deg) {
-  const key = i + '|' + deg;
+function geo(i, deg, m) {
+  const key = i + '|' + deg + (m ? '|m' : '');
   let g = M.geo.get(key);
   if (g) return g;
-  const { t, spot } = shapeOf(M.P, i, deg);
+  const { t, spot } = shapeOf(M.P, i, deg, m);
   const rings = [t.o].concat(t.holes);
   const edges = [];
   for (const r of rings) for (let k = 0; k < r.length; k++) { const a = r[k], b = r[(k + 1) % r.length]; edges.push([a[0], a[1], b[0], b[1]]); }
@@ -37,7 +37,7 @@ function cross(e, f, dx, dy) {
   return b1 * b2 < -1e-9;
 }
 function overlaps(p, q) {
-  const A = geo(p.i, p.deg), B = geo(q.i, q.deg);
+  const A = geo(p.i, p.deg, p.m), B = geo(q.i, q.deg, q.m);
   if (p.x + A.t.w <= q.x + 0.01 || q.x + B.t.w <= p.x + 0.01 || p.y + A.t.hh <= q.y + 0.01 || q.y + B.t.hh <= p.y + 0.01) return false;
   const dx = q.x - p.x, dy = q.y - p.y; // B v souřadnicích A
   for (const e of A.edges) {
@@ -50,7 +50,7 @@ function overlaps(p, q) {
   return false;
 }
 function problemOf(sheet, idx) {
-  const p = sheet[idx], g = geo(p.i, p.deg);
+  const p = sheet[idx], g = geo(p.i, p.deg, p.m);
   if (p.x < -0.01 || p.y < -0.01 || p.x + g.t.w > M.X + 0.01 || p.y + g.t.hh > M.P.Y + 0.01) return 'out';
   for (let k = 0; k < sheet.length; k++) if (k !== idx && overlaps(p, sheet[k])) return 'hit';
   return null;
@@ -58,7 +58,7 @@ function problemOf(sheet, idx) {
 
 /* ---------- otevření / zavření ---------- */
 export function openManual(P, layout, si, onDone) {
-  const used = Math.max(1, ...layout.sheets.flat().map((p) => p.x + shapeOf(P, p.i, p.deg).t.w));
+  const used = Math.max(1, ...layout.sheets.flat().map((p) => p.x + shapeOf(P, p.i, p.deg, p.m).t.w));
   M = {
     P, onDone, si: Math.min(si, layout.sheets.length - 1), sel: -1, drag: null, geo: new Map(),
     X: P.coil ? Math.max(used * 1.35, used + 600) : P.J.X,
@@ -91,6 +91,7 @@ function bindOnce() {
     M.sel = -1; draw();
   });
   $('mRot').addEventListener('click', rotateSel);
+  $('mMir').addEventListener('click', mirrorSel);
   $('mOut').addEventListener('click', () => {
     const s = M.sheets[M.si]; if (M.sel < 0) return msg('Nejdřív ťukni na díl.');
     M.tray.push(s[M.sel].i); s.splice(M.sel, 1); M.sel = -1; draw();
@@ -104,6 +105,7 @@ function bindOnce() {
   $('man').addEventListener('keydown', (e) => {
     if (e.key === 'Escape') close(false);
     if ((e.key === 'r' || e.key === 'R') && M.sel >= 0) rotateSel();
+    if ((e.key === 'm' || e.key === 'M') && M.sel >= 0) mirrorSel();
     if ((e.key === 'Delete' || e.key === 'Backspace') && M.sel >= 0) $('mOut').click();
   });
 }
@@ -128,7 +130,7 @@ function draw() {
   o.push(`<text x="${X / 2}" y="${-pad * 0.35}" class="sv-dim" font-size="${fs}" text-anchor="middle">${fmt(X)} ${U()}</text>`);
   $('mSvg').setAttribute('viewBox', `${-pad} ${-pad} ${X + pad * 2} ${Y + pad * 2}`);
   $('mSvg').innerHTML = o.join('');
-  $('mRot').disabled = $('mOut').disabled = M.sel < 0;
+  $('mRot').disabled = $('mMir').disabled = $('mOut').disabled = M.sel < 0;
   const counts = new Map(); for (const i of M.tray) counts.set(i, (counts.get(i) || 0) + 1);
   $('mTray').innerHTML = counts.size ? [...counts].map(([i, n]) => {
     const info = P.byPi[P.J.parts[i].pi];
@@ -138,9 +140,9 @@ function draw() {
   if (bad) msg('Červený díl se překrývá nebo přečnívá přes kraj.', true);
 }
 function pieceG(p, k, prob) {
-  const g = geo(p.i, p.deg), info = M.P.byPi[M.P.J.parts[p.i].pi];
+  const g = geo(p.i, p.deg, p.m), info = M.P.byPi[M.P.J.parts[p.i].pi];
   const cls = 'm-piece' + (k === M.sel ? ' sel' : '') + (prob ? ' bad' : '');
-  const Mx = Math.max(M.X, M.P.Y), label = info.name || info.sum, { spot } = shapeOf(M.P, p.i, p.deg);
+  const Mx = Math.max(M.X, M.P.Y), label = (info.name || info.sum) + (p.m ? ' ⇋' : ''), { spot } = shapeOf(M.P, p.i, p.deg, p.m);
   const fsz = Math.min(Mx / 48, spot.aw * 0.9 / (label.length * 0.58), spot.ah * 0.7);
   const txt = fsz >= Mx / 110 ? `<text x="${spot.x}" y="${spot.y}" font-size="${fsz}" text-anchor="middle" dominant-baseline="central" class="m-lbl">${esc(label)}</text>` : '';
   return `<g class="${cls}" data-k="${k}" transform="translate(${p.x} ${p.y})"><path d="${pathD(g.rings)}" fill-rule="evenodd" style="fill:var(--p${info.ci})" vector-effect="non-scaling-stroke"/>${txt}</g>`;
@@ -161,12 +163,12 @@ function onDown(e) {
 }
 function onMove(e) {
   if (!M.drag) return;
-  const [mx, my] = toSvg(e), s = M.sheets[M.si], p = s[M.drag.k], g = geo(p.i, p.deg);
+  const [mx, my] = toSvg(e), s = M.sheets[M.si], p = s[M.drag.k], g = geo(p.i, p.deg, p.m);
   let x = mx - M.drag.dx, y = my - M.drag.dy;
   // přichytávání ke krajům a sousedům
   const thr = unitsPerPx() * 14;
   const xs = [0, M.X - g.t.w], ys = [0, M.P.Y - g.t.hh];
-  s.forEach((q, j) => { if (j === M.drag.k) return; const h = geo(q.i, q.deg).t; xs.push(q.x + h.w, q.x - g.t.w, q.x, q.x + (h.w - g.t.w) / 2); ys.push(q.y + h.hh, q.y - g.t.hh, q.y, q.y + (h.hh - g.t.hh) / 2); });
+  s.forEach((q, j) => { if (j === M.drag.k) return; const h = geo(q.i, q.deg, q.m).t; xs.push(q.x + h.w, q.x - g.t.w, q.x, q.x + (h.w - g.t.w) / 2); ys.push(q.y + h.hh, q.y - g.t.hh, q.y, q.y + (h.hh - g.t.hh) / 2); });
   const snap = (v, arr) => { let b = v, bd = thr; for (const a of arr) { const d = Math.abs(a - v); if (d < bd) { bd = d; b = a; } } return bd < thr ? b : Math.round(v); };
   x = snap(x, xs); y = snap(y, ys);
   p.x = x; p.y = y; M.drag.moved = true;
@@ -185,10 +187,22 @@ function rotateSel() {
   const s = M.sheets[M.si]; if (M.sel < 0) return;
   const p = s[M.sel], part = M.P.J.parts[p.i];
   if (!part.rot) return msg('Tenhle díl má zakázané otáčení (upravíš v dílu „Lze otáčet“).', true);
-  const g0 = geo(p.i, p.deg).t; const cx = p.x + g0.w / 2, cy = p.y + g0.hh / 2;
+  const g0 = geo(p.i, p.deg, p.m).t; const cx = p.x + g0.w / 2, cy = p.y + g0.hh / 2;
   p.deg = (p.deg + 90) % 360;
-  const g1 = geo(p.i, p.deg).t; p.x = Math.round(cx - g1.w / 2); p.y = Math.round(cy - g1.hh / 2);
+  const g1 = geo(p.i, p.deg, p.m).t; p.x = Math.round(cx - g1.w / 2); p.y = Math.round(cy - g1.hh / 2);
   draw();
+}
+/** Převrátí vybraný díl zleva doprava (zrcadlově) – na místě, kde leží. */
+function mirrorSel() {
+  const s = M.sheets[M.si]; if (M.sel < 0) return msg('Nejdřív ťukni na díl.');
+  const p = s[M.sel];
+  if (isSymmetric(M.P.J.parts[p.i].poly)) return msg('Tenhle díl je souměrný – zrcadlově vypadá úplně stejně.');
+  const g0 = geo(p.i, p.deg, p.m).t; const cx = p.x + g0.w / 2, cy = p.y + g0.hh / 2;
+  // zrcadlení podle svislé osy na obrazovce: převrátit obrys a otočení vzít opačně
+  p.m = !p.m; p.deg = (360 - p.deg) % 360;
+  const g1 = geo(p.i, p.deg, p.m).t; p.x = Math.round(cx - g1.w / 2); p.y = Math.round(cy - g1.hh / 2);
+  draw();
+  if (!problemOf(s, M.sel)) msg(p.m ? 'Díl je zrcadlově – vyřízne se převrácený.' : 'Díl je zase normálně.');
 }
 function fromTray(i) {
   const s = M.sheets[M.si], part = M.P.J.parts[i];
