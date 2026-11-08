@@ -1,6 +1,6 @@
 // Nářez plechu – hlavní logika aplikace: zadání, seznam dílů, výpočet, zakázky, instalace.
 import { $, esc, fmt, numv, lenv, toUnit, setUnit, U, UNITS, plural } from './format.js';
-import { SHAPES, defaults, geomOf, thumbSVG, profileSVG } from './shapes.js';
+import { SHAPES, defaults, geomOf, thumbSVG, profileSVG, mirrorPoly, mirOf } from './shapes.js';
 import { buildConfigs, runRect, evalRect, cmp, mutate, EPS } from './rect-engine.js';
 import { NestSolver } from './nest-engine.js';
 import { renderWarns, renderEmpty, renderBlank, renderRect, renderLayout, layoutFromSnap, layoutFromRect, updateStatus } from './render.js';
@@ -21,6 +21,8 @@ const example = () => ({
     pc('Záslepka', 'circle', { D: '150' }, 2),
   ],
 });
+const MIRB = 100000;  // klíč zrcadlového kusu = MIRB + pořadí dílu
+const pcsOf = (p) => (parseInt(numv(p.q), 10) || 0) * (mirOf(p) === 2 ? 2 : 1);
 const store = {
   get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
@@ -78,8 +80,8 @@ $('units').addEventListener('click', (e) => {
   // plán zůstává stejný, jen se přepíšou čísla do nové jednotky
   if (!shown) return schedule();
   const P = shown.P;
-  for (const v of Object.values(P.byPi)) { const g = geomOf(state.pieces[v.pi]); if (g.ok) v.sum = g.sum; }
-  for (const v of P.invalid || []) { const g = geomOf(state.pieces[v.pi]); if (g.ok) v.sum = g.sum; }
+  for (const v of Object.values(P.byPi)) { const g = geomOf(state.pieces[v.src]); if (g.ok) v.sum = g.sum; }
+  for (const v of P.invalid || []) { const g = geomOf(state.pieces[v.src]); if (g.ok) v.sum = g.sum; }
   renderWarns(P); rerender();
 });
 function rerender() {
@@ -114,10 +116,11 @@ $('showCuts').addEventListener('change', (e) => { state.showCuts = e.target.chec
 /* ---------- seznam dílů ---------- */
 function renderPieces() {
   const list = state.pieces.map((p, i) => {
-    const g = geomOf(p), def = SHAPES[p.shape?.t] || SHAPES.rect;
+    const g = geomOf(p), def = SHAPES[p.shape?.t] || SHAPES.rect, mir = mirOf(p);
+    const mtag = mir === 1 ? '<span class="mtag" title="Vyřízne se zrcadlově">⇋ zrcadlově</span>' : mir === 2 ? '<span class="mtag" title="Vyřízne se normálně i zrcadlově – od každého zadaný počet">⇋ + zrcadlový</span>' : '';
     return `<div class="pcard${g.ok ? '' : ' bad'}" data-i="${i}">
-  <button type="button" class="thumb" data-act="edit" aria-label="Upravit díl ${i + 1}">${g.ok ? (g.bend ? profileSVG(g.bend, { size: 44 }) : thumbSVG(g.poly, i, 52)) : '<span class="thumb-x">?</span>'}</button>
-  <button type="button" class="pinfo" data-act="edit" title="${esc((p.name ? p.name + ' – ' : '') + def.n)}"><b>${esc(p.name || def.n)}</b><span>${g.ok ? `<span class="mono">${esc(g.sum)}</span>` : esc(g.err)}</span></button>
+  <button type="button" class="thumb" data-act="edit" aria-label="Upravit díl ${i + 1}">${g.ok ? (g.bend ? profileSVG(g.bend, { size: 44 }) : thumbSVG(mir === 1 ? mirrorPoly(g.poly) : g.poly, i, 52)) : '<span class="thumb-x">?</span>'}</button>
+  <button type="button" class="pinfo" data-act="edit" title="${esc((p.name ? p.name + ' – ' : '') + def.n)}"><b>${esc(p.name || def.n)}</b><span>${g.ok ? `<span class="mono">${esc(g.sum)}</span>` : esc(g.err)}</span>${g.ok ? mtag : ''}</button>
   <label class="switch sm" title="Program smí díl při skládání otočit napříč (o 90°). Vypni u plechu se směrem – drážky, lak."><input type="checkbox" data-f="rot" ${p.rot ? 'checked' : ''}><i></i>smí se otočit</label>
   <div class="qty" role="group" aria-label="Počet kusů"><button type="button" data-act="minus" aria-label="Ubrat kus">−</button><input type="text" inputmode="numeric" data-f="q" value="${esc(p.q)}" aria-label="Počet kusů dílu ${i + 1}"><button type="button" data-act="plus" aria-label="Přidat kus">+</button></div>
   <button type="button" class="del" data-act="del" aria-label="Smazat díl ${i + 1}" title="Smazat">✕</button>
@@ -126,7 +129,7 @@ function renderPieces() {
   $('plist').innerHTML = list || `<div class="plist-empty">Zatím žádné díly</div>`;
   $('exNote').hidden = !state.example;
   $('wipe').hidden = !state.pieces.length;
-  const n = state.pieces.reduce((s, p) => s + (parseInt(numv(p.q), 10) || 0), 0);
+  const n = state.pieces.reduce((s, p) => s + pcsOf(p), 0);
   $('pcount').textContent = state.pieces.length ? `${n} ${plural(n, 'kus', 'kusy', 'kusů')}` : '';
   renderJobName();
 }
@@ -171,7 +174,7 @@ $('plist').addEventListener('change', (e) => {
   const card = e.target.closest('.pcard'); if (!card || e.target.dataset.f !== 'rot') return;
   state.pieces[+card.dataset.i].rot = e.target.checked; state.example = false; schedule();
 });
-function updateCount() { const n = state.pieces.reduce((s, p) => s + (parseInt(numv(p.q), 10) || 0), 0); $('pcount').textContent = `${n} ${plural(n, 'kus', 'kusy', 'kusů')}`; $('exNote').hidden = true; }
+function updateCount() { const n = state.pieces.reduce((s, p) => s + pcsOf(p), 0); $('pcount').textContent = `${n} ${plural(n, 'kus', 'kusy', 'kusů')}`; $('exNote').hidden = true; }
 
 function editPiece(i) {
   openEditor(i >= 0 ? state.pieces[i] : null, i, {
@@ -197,7 +200,7 @@ $('clearAll').addEventListener('click', () => { state.pieces = []; state.example
 function signature() {
   // v mm, aby přepnutí jednotek nezahodilo ruční rozložení
   const mmP = (p) => Object.fromEntries(Object.entries(p.shape.p || {}).map(([k, v]) => [k, lenKeys(p).includes(k) ? lenv(v) : numv(v)]));
-  return JSON.stringify([state.mode, lenv(state.W), state.mode === 'coil' ? '' : lenv(state.L), lenv(state.kerf), state.pieces.map((p) => [p.q, !!p.rot, p.shape.t, p.shape.t === 'custom' ? p.shape.pts : mmP(p), (p.shape.segs || []).map((s) => [lenv(s.L), numv(s.a), s.d])])]);
+  return JSON.stringify([state.mode, lenv(state.W), state.mode === 'coil' ? '' : lenv(state.L), lenv(state.kerf), state.pieces.map((p) => [p.q, !!p.rot, mirOf(p), p.shape.t, p.shape.t === 'custom' ? p.shape.pts : mmP(p), (p.shape.segs || []).map((s) => [lenv(s.L), numv(s.a), s.d])])]);
 }
 function makeProblem() {
   const coil = state.mode === 'coil';
@@ -211,11 +214,16 @@ function makeProblem() {
     let q = parseInt(numv(p.q), 10); if (!(q > 0)) return; q = Math.min(q, 999);
     const g = geomOf(p);
     if (!g.ok) { bad.push({ name: p.name || g.name, err: g.err }); return; }
-    const rot = !!p.rot;
-    const info = { pi, name: (p.name || '').trim(), sum: g.sum, shapeName: g.name, ci: pi % 8, poly: g.poly, area: g.area, bw: g.bw, bh: g.bh, q, rot, isRect: g.isRect, w: g.isRect ? g.p.w : 0, l: g.isRect ? g.p.l : 0, bend: g.bend };
-    const f0 = g.bw <= X + 1e-6 && g.bh <= Y + 1e-6, f1 = rot && g.bh <= X + 1e-6 && g.bw <= Y + 1e-6;
-    if (!f0 && !f1) { info.wouldRot = !rot && g.bh <= X + 1e-6 && g.bw <= Y + 1e-6; invalid.push(info); return; }
-    byPi[pi] = info; valid.push(info);
+    const rot = !!p.rot, mir = mirOf(p), base = (p.name || '').trim();
+    // zrcadlový kus je samostatný tvar s vlastním klíčem (MIRB + pořadí dílu)
+    const variants = mir === 0 ? [false] : mir === 1 ? [true] : [false, true];
+    for (const m of variants) {
+      const key = m ? MIRB + pi : pi;
+      const info = { pi: key, src: pi, mir: m, name: m ? `${base || g.name} – zrcadlově` : base, sum: g.sum, shapeName: g.name, ci: pi % 8, poly: m ? mirrorPoly(g.poly) : g.poly, area: g.area, bw: g.bw, bh: g.bh, q, rot, isRect: g.isRect, w: g.isRect ? g.p.w : 0, l: g.isRect ? g.p.l : 0, bend: g.bend };
+      const f0 = g.bw <= X + 1e-6 && g.bh <= Y + 1e-6, f1 = rot && g.bh <= X + 1e-6 && g.bw <= Y + 1e-6;
+      if (!f0 && !f1) { info.wouldRot = !rot && g.bh <= X + 1e-6 && g.bw <= Y + 1e-6; invalid.push(info); continue; }
+      byPi[key] = info; valid.push(info);
+    }
   });
   const count = valid.reduce((s, v) => s + v.q, 0);
   if (count > 1500) return { errs: [`Moc kusů najednou (${count}). Rozděl zakázku, nejvýš 1 500 kusů.`], count: 0, invalid, bad };

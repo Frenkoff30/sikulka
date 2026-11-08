@@ -1,6 +1,6 @@
 // Editor dílu: výběr klempířské šablony, nebo nakreslení vlastního tvaru bod po bodu.
 import { $, esc, fmt, fmtN, numv, lenv, U, isExpr } from './format.js';
-import { SHAPES, SHAPE_ORDER, defaults, geomOf, iconSVG, pathD, inside, profileSVG, BEND_PRESETS, presetSegs } from './shapes.js';
+import { SHAPES, SHAPE_ORDER, defaults, geomOf, iconSVG, pathD, inside, profileSVG, BEND_PRESETS, presetSegs, mirrorPoly, MIR_OPTS, mirOf, MIR_SAME, isSymmetric } from './shapes.js';
 import { polyXform } from './nest-engine.js';
 
 let ed = null;       // rozpracovaný díl
@@ -21,10 +21,13 @@ export function initEditor() {
     renderPreview();
   });
   $('eName').addEventListener('input', (e) => { ed.d.name = e.target.value; });
-  $('eQty').addEventListener('input', (e) => { ed.d.q = e.target.value; });
+  $('eQty').addEventListener('input', (e) => { ed.d.q = e.target.value; mirHint(geomOf(ed.d)); });
   $('eRot').addEventListener('change', (e) => { ed.d.rot = e.target.checked; });
+  // zrcadlový díl
+  $('eMir').innerHTML = MIR_OPTS.map(([n], k) => `<button type="button" role="radio" data-m="${k}" aria-checked="false">${k ? '<svg viewBox="0 0 20 14" aria-hidden="true"><path class="ico" d="M10 1v12M8 3.5L2 11h6zM12 3.5l6 7.5h-6z"/></svg>' : ''}${n}</button>`).join('');
+  $('eMir').addEventListener('click', (e) => { const b = e.target.closest('[data-m]'); if (!b) return; ed.d.mir = +b.dataset.m; syncMir(); if (SHAPES[ed.d.shape.t].custom) renderCustomInfo(); else renderPreview(); });
   document.querySelectorAll('#dlg [data-q]').forEach((b) => b.addEventListener('click', () => {
-    const q = Math.max(1, (parseInt(ed.d.q, 10) || 0) + +b.dataset.q); ed.d.q = String(q); $('eQty').value = ed.d.q;
+    const q = Math.max(1, (parseInt(ed.d.q, 10) || 0) + +b.dataset.q); ed.d.q = String(q); $('eQty').value = ed.d.q; mirHint(geomOf(ed.d));
   }));
   $('toCustom').addEventListener('click', toCustom);
   // ohýbaný profil
@@ -103,6 +106,7 @@ export function openEditor(piece, idx, callbacks) {
   $('eName').value = src.name || '';
   $('eQty').value = src.q;
   $('eRot').checked = !!src.rot;
+  src.mir = mirOf(src);
   $('eErr').hidden = true;
   $('dlg').hidden = false;
   document.body.classList.add('noscroll');
@@ -142,6 +146,7 @@ function renderForm() {
   $('ePrev').hidden = custom; $('drawSvg').toggleAttribute('hidden', !custom);
   $('toCustom').hidden = custom || !def.edges;
   $('eBend').hidden = !def.bend;
+  syncMir();
   if (custom) { syncSnap(); redrawCustom(); return; }
   if (def.bend) { if (!(ed.d.shape.segs?.length >= 2)) ed.d.shape.segs = presetSegs(1); renderBend(); }
   $('eFields').innerHTML = def.f.map(([k, label, , , unit]) => {
@@ -167,7 +172,8 @@ function renderPreview() {
     $('eInfo').innerHTML = `<span class="big">Rozvinutá šířka <b>${fmt(g.bend.w)} ${U()}</b></span><span>Ohyby orýsuj od kraje <i class="dot"></i>: <b>${g.bend.marks.map(fmt).join(' · ')}</b> ${U()}</span>`;
     return;
   }
-  $('ePrev').innerHTML = shapeSVG(g, SHAPES[ed.d.shape.t].edges);
+  $('ePrev').innerHTML = shapeSVG(g, SHAPES[ed.d.shape.t].edges, MIR_SAME.has(ed.d.shape.t) ? 0 : mirOf(ed.d));
+  mirHint(g);
   const lines = (def.info ? def.info(g.p) : []).concat([`Zabere ${fmt(g.bh)} × ${fmt(g.bw)} ${U()} · ${(g.area / 1e6).toLocaleString('cs-CZ', { maximumFractionDigits: 3 })} m²`]);
   $('eInfo').innerHTML = lines.map((l) => `<span>${esc(l)}</span>`).join('');
 }
@@ -198,11 +204,39 @@ function stripSVG(b) {
   return `<svg viewBox="${-pad} ${-pad * 1.4} ${W + pad * 2} ${H + pad * 2.4}" class="pf strip" role="img" aria-label="Rozvinutý pás s ohyby">${o.join('')}</svg>`;
 }
 
-function shapeSVG(g, edges) {
-  const t = polyXform(g.poly, 0), M = Math.max(t.w, t.hh), pad = M * 0.15, fs = M / 21;
-  const o = [`<path d="${pathD([t.o].concat(t.holes))}" fill-rule="evenodd" class="pv-p" style="fill:var(--p${ed.ci % 8})" vector-effect="non-scaling-stroke"/>`];
-  if (edges && t.o.length <= 24) o.push(edgeLabels(t.o, [t.o], fs, M));
-  return `<svg viewBox="${-pad} ${-pad} ${t.w + pad * 2} ${t.hh + pad * 2}" role="img" aria-label="Náhled tvaru">${o.join('')}</svg>`;
+/** Náhled tvaru; mir 1 = zrcadlově, 2 = normální a vedle něj zrcadlový. */
+function shapeSVG(g, edges, mir = 0) {
+  const polys = mir === 0 ? [g.poly] : mir === 1 ? [mirrorPoly(g.poly)] : [g.poly, mirrorPoly(g.poly)];
+  const ts = polys.map((p) => polyXform(p, 0)), t0 = ts[0];
+  const gap = ts.length > 1 ? Math.max(t0.w, t0.hh) * 0.22 : 0;
+  const W = ts.reduce((s, t) => s + t.w, 0) + gap * (ts.length - 1), H = t0.hh;
+  const M = Math.max(W / ts.length, H), pad = M * 0.15, fs = M / 21;
+  const o = []; let ox = 0;
+  ts.forEach((t, k) => {
+    const sh = (r) => r.map((p) => [p[0] + ox, p[1]]), o2 = sh(t.o);
+    o.push(`<path d="${pathD([o2].concat(t.holes.map(sh)))}" fill-rule="evenodd" class="pv-p${mir === 2 && k ? ' mir' : ''}" style="fill:var(--p${ed.ci % 8})" vector-effect="non-scaling-stroke"/>`);
+    if (edges && t.o.length <= 24) o.push(edgeLabels(o2, [o2], fs, M));
+    if (mir === 2) o.push(`<text x="${ox + t.w / 2}" y="${H + fs * 2.2}" class="pv-cap2" font-size="${fs * 0.95}" text-anchor="middle">${k ? 'zrcadlově' : 'normálně'}</text>`);
+    ox += t.w + gap;
+  });
+  if (mir === 2) o.push(`<line x1="${t0.w + gap / 2}" y1="${-pad * 0.3}" x2="${t0.w + gap / 2}" y2="${H + pad * 0.3}" class="pv-axis" vector-effect="non-scaling-stroke"/>`);
+  const bot = mir === 2 ? fs * 3 : 0;
+  return `<svg viewBox="${-pad} ${-pad} ${W + pad * 2} ${H + pad * 2 + bot}" role="img" aria-label="Náhled tvaru">${o.join('')}</svg>`;
+}
+
+/* ---------- zrcadlový díl ---------- */
+function syncMir() {
+  const same = MIR_SAME.has(ed.d.shape.t);
+  $('eMirBox').hidden = same;
+  document.querySelectorAll('#eMir [data-m]').forEach((b) => b.setAttribute('aria-checked', String(+b.dataset.m === mirOf(ed.d))));
+}
+function mirHint(g) {
+  const m = mirOf(ed.d), el = $('eMirHint');
+  let t = '';
+  if (g?.ok && m && isSymmetric(g.poly)) t = 'Tenhle tvar je souměrný – zrcadlový kus vyjde úplně stejný.';
+  else if (m === 2) t = `Vyřízne se ${ed.d.q || 1}× normálně a ${ed.d.q || 1}× zrcadlově (levý i pravý).`;
+  else if (m === 1) t = 'Díl se vyřízne převrácený zleva doprava.';
+  el.textContent = t; el.hidden = !t;
 }
 
 function edgeLabels(pts, rings, fs, M) {
@@ -264,6 +298,7 @@ function renderCoords() {
 
 function renderCustomInfo() {
   const g = geomOf(ed.d);
+  mirHint(g);
   $('eInfo').innerHTML = g.ok
     ? `<span>Zabere ${fmt(g.bh)} × ${fmt(g.bw)} ${U()} · ${(g.area / 1e6).toLocaleString('cs-CZ', { maximumFractionDigits: 3 })} m²</span>`
     : `<span>${esc(g.err)}</span>`;
@@ -324,7 +359,8 @@ function save(more) {
   const g = geomOf(ed.d);
   if (!g.ok) { $('eErr').textContent = g.err; $('eErr').hidden = false; return; }
   lastT = ed.d.shape.t;
-  const piece = { name: ed.d.name, q: ed.d.q, rot: !!ed.d.rot, shape: { t: ed.d.shape.t, p: ed.d.shape.p, pts: ed.d.shape.t === 'custom' ? ed.d.shape.pts : [], ...(ed.d.shape.t === 'bend' ? { segs: ed.d.shape.segs } : {}) } };
+  const mir = MIR_SAME.has(ed.d.shape.t) ? 0 : mirOf(ed.d);
+  const piece = { name: ed.d.name, q: ed.d.q, rot: !!ed.d.rot, ...(mir ? { mir } : {}), shape: { t: ed.d.shape.t, p: ed.d.shape.p, pts: ed.d.shape.t === 'custom' ? ed.d.shape.pts : [], ...(ed.d.shape.t === 'bend' ? { segs: ed.d.shape.segs } : {}) } };
   const idx = ed.idx;
   if (more) {
     cb.onSave(piece, idx, true);

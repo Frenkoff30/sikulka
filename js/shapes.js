@@ -254,6 +254,26 @@ export function geomOf(pc) {
   return { ok: true, t, name: def.n, p, poly: { o: n.o, holes: n.holes }, area: polyArea(n), bw: n.w, bh: n.hh, sum, isRect: t === 'rect' || !!bend, bend };
 }
 
+/** Zrcadlový obrys (převrácený zleva doprava). U dvoubarevného plechu se díl nesmí obrátit rubem
+    nahoru, takže zrcadlový kus se musí vyříznout jako samostatný tvar. */
+export function mirrorPoly(poly) {
+  const f = (r) => r.map((p) => [-p[0], p[1]]).reverse();
+  const n = polyXform({ o: f(poly.o), holes: (poly.holes || []).map(f) }, 0);
+  return { o: n.o, holes: n.holes };
+}
+// mir: 0 = jen normálně, 1 = jen zrcadlově, 2 = normálně i zrcadlově (pár levý + pravý)
+export const MIR_OPTS = [['Ne', 'normálně'], ['Jen zrcadlově', 'zrcadlově'], ['Oba – pár', 'normálně i zrcadlově']];
+export const mirOf = (pc) => (pc.mir === 1 || pc.mir === 2 ? pc.mir : 0);
+// tvary, které jsou zrcadlově vždy stejné – volbu u nich ani nenabízíme
+export const MIR_SAME = new Set(['rect', 'bend', 'circle', 'ring']);
+/** Je obrys souměrný zleva doprava (zrcadlový kus by byl úplně stejný)? */
+export function isSymmetric(poly) {
+  const m = mirrorPoly(poly), a = polyXform(poly, 0);
+  if (m.o.length !== a.o.length || m.holes.length !== a.holes.length) return false;
+  const tol = Math.max(0.5, Math.max(a.w, a.hh) * 1e-4);
+  return a.o.every((p) => m.o.some((q) => Math.abs(p[0] - q[0]) < tol && Math.abs(p[1] - q[1]) < tol));
+}
+
 /** Místo pro popisek uvnitř tvaru: bod co nejdál od okrajů + volná šířka/výška kolem něj. */
 export function labelSpot(t) {
   const rings = [t.o].concat(t.holes);
