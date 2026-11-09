@@ -1,5 +1,5 @@
 // Nářez plechu – hlavní logika aplikace: zadání, seznam dílů, výpočet, zakázky, instalace.
-import { $, esc, fmt, numv, lenv, toUnit, setUnit, U, UNITS, plural } from './format.js';
+import { $, esc, fmt, numv, lenv, toUnit, setUnit, U, UNITS, plural, m2 } from './format.js';
 import { SHAPES, defaults, geomOf, thumbSVG, profileSVG, mirrorPoly, mirOf } from './shapes.js';
 import { buildConfigs, runRect, evalRect, cmp, mutate, EPS } from './rect-engine.js';
 import { NestSolver } from './nest-engine.js';
@@ -8,7 +8,7 @@ import { initEditor, openEditor } from './editor.js';
 import { openManual } from './manual.js';
 
 /* ---------- stav ---------- */
-const KEY = 'narez-plechu-v2', KEY_V1 = 'narez-plechu-v1', JOBS = 'narez-zakazky-v1', THEME = 'narez-vzhled-v2';
+const KEY = 'narez-plechu-v2', KEY_V1 = 'narez-plechu-v1', JOBS = 'narez-zakazky-v1', THEME = 'narez-vzhled-v2', STOCK = 'narez-sklad-v1';
 const pc = (name, t, p, q, rot = true) => ({ name, q: String(q), rot, shape: { t, p: Object.assign(defaults(t), p), pts: [] } });
 const example = () => ({
   unit: 'mm', mode: 'sheet', W: '1250', L: '2500', cut: 'g', kerf: '0', showCuts: true, example: true, manual: null,
@@ -327,6 +327,8 @@ function showManual(P) {
   renderLayout(L, P, false);
 }
 $('sheets').addEventListener('click', (e) => {
+  const sb = e.target.closest('[data-stock]');
+  if (sb) { const [w, l, n] = sb.dataset.stock.split('|').map(Number); addStock(w, l, n, '', state.jobName || ''); return; }
   const b = e.target.closest('[data-manual]'); if (!b || !shown) return;
   const P = shown.P;
   const L = shown.kind === 'rect' ? layoutFromRect(shown.best, P) : shown.L;
@@ -384,6 +386,67 @@ $('jobNew').addEventListener('click', () => {
   renderStatic(); renderPieces(); schedule(); closeJobs(); editPiece(-1);
 });
 
+/* ---------- sklad zbytků ---------- */
+// Položka: { id, w: šířka mm, l: délka mm, q: kusů, note, job, date }
+const stock = () => store.get(STOCK) || [];
+function addStock(w, l, q, note, job) {
+  const list = stock();
+  const same = list.find((s) => s.w === w && s.l === l && (s.note || '') === note);
+  if (same) { same.q += q; same.date = Date.now(); } else list.unshift({ id: Date.now().toString(36), w, l, q, note, job, date: Date.now() });
+  if (!store.set(STOCK, list)) return toast('Uložení se nepovedlo – paměť prohlížeče je plná nebo zakázaná.');
+  renderStockBadge(); if (!$('stockDlg').hidden) renderStock();
+  toast(`Do skladu: ${q > 1 ? q + '× ' : ''}${fmt(w)} × ${fmt(l)} ${U()}`, () => {
+    const L = stock(), it = L.find((s) => s.w === w && s.l === l && (s.note || '') === note);
+    if (it) { it.q -= q; store.set(STOCK, L.filter((s) => s.q > 0)); renderStockBadge(); if (!$('stockDlg').hidden) renderStock(); }
+  });
+}
+function renderStockBadge() { const n = stock().reduce((a, s) => a + s.q, 0); $('stockN').textContent = n; $('stockN').hidden = !n; }
+function stockThumb(s) {
+  const k = 34 / Math.max(s.w, s.l), w = Math.max(3, s.l * k), h = Math.max(3, s.w * k);
+  return `<svg viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><rect x="${(40 - w) / 2}" y="${(40 - h) / 2}" width="${w}" height="${h}" class="st-r"/></svg>`;
+}
+function renderStock() {
+  const list = stock().sort((a, b) => b.w * b.l - a.w * a.l);
+  store.set(STOCK, list);
+  const n = list.reduce((a, s) => a + s.q, 0), area = list.reduce((a, s) => a + s.w * s.l * s.q, 0);
+  $('stockSum').textContent = n ? `${n} ${plural(n, 'kus', 'kusy', 'kusů')} · ${m2(area)} m²` : '';
+  $('stockList').innerHTML = list.length ? list.map((s, k) => `<div class="stock">
+    ${stockThumb(s)}
+    <div class="st-i"><b class="mono">${fmt(s.w)} × ${fmt(s.l)} ${U()}</b><span class="hint">${m2(s.w * s.l)} m²${s.note ? ' · ' + esc(s.note) : ''}${s.job ? ' · z „' + esc(s.job) + '“' : ''}</span></div>
+    <span class="st-q">${s.q}×</span>
+    <button type="button" class="btn ghost sm" data-use="${k}" title="Nastavit tenhle zbytek jako plech a poskládat na něj díly">Použít</button>
+    <button type="button" class="del" data-sdel="${k}" aria-label="Ubrat jeden kus ${fmt(s.w)} × ${fmt(s.l)}" title="Ubrat kus (spotřebovaný)">−</button>
+  </div>`).join('') : '<p class="hint st-empty">Sklad je prázdný.</p>';
+}
+$('btnStock').addEventListener('click', () => { renderStock(); syncUnits(); $('stockDlg').hidden = false; document.body.classList.add('noscroll'); $('stW').focus(); });
+const closeStock = () => { $('stockDlg').hidden = true; document.body.classList.remove('noscroll'); };
+$('stockX').addEventListener('click', closeStock);
+$('stockDlg').addEventListener('click', (e) => { if (e.target === $('stockDlg')) closeStock(); });
+$('stockDlg').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeStock(); });
+$('stockForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const w = lenv($('stW').value), l = lenv($('stL').value);
+  $('stW').classList.toggle('bad', !(w > 0)); $('stL').classList.toggle('bad', !(l > 0));
+  if (!(w > 0 && l > 0)) return;
+  addStock(Math.round(w), Math.round(l), 1, $('stNote').value.trim(), '');
+  $('stW').value = ''; $('stL').value = ''; $('stW').focus();
+});
+$('stockList').addEventListener('click', (e) => {
+  const u = e.target.closest('[data-use]'), d = e.target.closest('[data-sdel]');
+  const list = stock();
+  if (u) {
+    const s = list[+u.dataset.use];
+    state.mode = 'sheet'; state.W = toUnit(s.w); state.L = toUnit(s.l); state.manual = null;
+    renderStatic(); schedule(); closeStock(); setView('plan');
+    toast(`Plech nastaven na zbytek ${fmt(s.w)} × ${fmt(s.l)} ${U()}.`);
+  }
+  if (d) {
+    const k = +d.dataset.sdel, s = list[k], old = JSON.parse(JSON.stringify(list));
+    s.q -= 1; store.set(STOCK, list.filter((x) => x.q > 0)); renderStock(); renderStockBadge();
+    toast(`Ze skladu ubrán kus ${fmt(s.w)} × ${fmt(s.l)} ${U()}.`, () => { store.set(STOCK, old); renderStock(); renderStockBadge(); });
+  }
+});
+
 /* ---------- tisk ---------- */
 $('btnPrint').addEventListener('click', () => window.print());
 window.addEventListener('beforeprint', () => document.querySelectorAll('#sheets details').forEach((d) => { d.dataset.wasOpen = d.open ? '1' : ''; d.open = true; }));
@@ -408,6 +471,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) naviga
 
 /* ---------- start ---------- */
 applyTheme();
+renderStockBadge();
 initEditor();
 renderStatic();
 renderPieces();

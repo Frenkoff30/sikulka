@@ -36,6 +36,7 @@
   </div>
   <div class="hbtns">
     <button type="button" class="hbtn" id="btnInstall" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M10 3v10M6 9l4 4 4-4M4 16h12"/></svg><span>Nainstalovat</span></button>
+    <button type="button" class="hbtn" id="btnStock"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M3 3v14M17 3v14M3 8h14M3 13.5h14M5.5 5.5h5v2.5h-5zM9 10.5h6v3h-6z"/></svg><span>Sklad</span><b class="hb-badge" id="stockN" hidden></b></button>
     <button type="button" class="hbtn" id="btnJobs"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M2.5 5.5h5l1.8 2h8.2v8.5h-15z"/></svg><span>Zakázky</span></button>
     <button type="button" class="hbtn" id="btnPrint"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M5.5 7.5v-4h9v4M5.5 14h-2v-6.5h13V14h-2M5.5 11h9v6h-9z"/></svg><span>Tisk</span></button>
     <button type="button" class="hbtn" id="btnTheme"><svg viewBox="0 0 20 20" aria-hidden="true"><circle class="ico" cx="10" cy="10" r="6.5"/><path class="ico-f" d="M10 3.5a6.5 6.5 0 0 1 0 13z"/></svg><span id="themeL">Tmavý</span></button>
@@ -206,6 +207,23 @@
       <div class="lbl">Uložené zakázky</div>
       <div class="joblist" id="jobList"></div>
       <button type="button" class="btn ghost" id="jobNew">＋ Nová prázdná zakázka</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sklad zbytků -->
+<div class="dlg-back" id="stockDlg" hidden>
+  <div class="dlg small" role="dialog" aria-modal="true" aria-labelledby="stockT">
+    <div class="dlg-head"><h2 id="stockT">Sklad zbytků</h2><span class="sec-meta" id="stockSum"></span><button type="button" class="del" id="stockX" aria-label="Zavřít">✕</button></div>
+    <div class="dlg-scroll">
+      <p class="hint">Zbytky z nářezu sem dáš tlačítkem <b>Do skladu</b> pod výkresem tabule. Kus z dílny přidáš ručně tady.</p>
+      <form class="stockform" id="stockForm">
+        <div class="field"><label for="stW">Šířka</label><div class="inp"><input type="text" id="stW" inputmode="decimal" autocomplete="off"><span class="u-l">mm</span></div></div>
+        <div class="field"><label for="stL">Délka</label><div class="inp"><input type="text" id="stL" inputmode="decimal" autocomplete="off"><span class="u-l">mm</span></div></div>
+        <div class="field st-note"><label for="stNote">Materiál / barva <small>(nepovinné)</small></label><input type="text" class="plain" id="stNote" placeholder="např. pozink 0,55 · tmavě šedá" autocomplete="off"></div>
+        <button class="btn primary" type="submit">Přidat</button>
+      </form>
+      <div class="stocklist" id="stockList"></div>
     </div>
   </div>
 </div>

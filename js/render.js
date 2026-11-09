@@ -128,6 +128,30 @@ function cardHead(g, P, meta, running) {
 }
 const pc = (ci) => `<span class="pc" style="background:var(--p${ci % 8})"></span>`;
 
+/** Zbytek na výkrese: čárkovaný obdélník, délky stran podél horní a levé hrany, uprostřed číslo, rozměr a plocha. */
+function offG(r, k, fs, minF) {
+  const o = [`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" class="sv-off" vector-effect="non-scaling-stroke"/>`];
+  const fe = Math.min(fs * 0.55, r.w / 6, r.h / 5);
+  let ins = 0;
+  if (fe >= minF) {
+    ins = fe * 1.9;
+    o.push(`<text x="${r.x + r.w / 2}" y="${r.y + fe * 0.95}" class="sv-to sv-oe" font-size="${fe}" text-anchor="middle" dominant-baseline="central">${fmt(r.w)}</text>`);
+    const lx = r.x + fe * 0.95, ly = r.y + r.h / 2;
+    o.push(`<text x="${lx}" y="${ly}" class="sv-to sv-oe" font-size="${fe}" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 ${lx} ${ly})">${fmt(r.h)}</text>`);
+  }
+  o.push(fitText([`ZBYTEK ${k + 1}`, `${fmt(r.h)} × ${fmt(r.w)}`, `${m2(r.w * r.h)} m²`], r.x + (r.w + ins) / 2, r.y + (r.h + ins) / 2, r.w - ins, r.h - ins, fs * 0.7, minF, 'sv-to', 'sv-ton'));
+  return o.join('');
+}
+/** Seznam zbytků pod výkresem – rozměry, plocha a tlačítko „Do skladu“ (n = kolik je stejných tabulí). */
+function offList(list, n) {
+  if (!list.length) return '';
+  const rows = list.map((r, k) => {
+    const w = Math.floor(r.h), l = Math.floor(r.w);
+    return `<li><span class="ofn">${k + 1}</span><span class="ofd"><b class="mono">${fmt(w)} × ${fmt(l)} ${U()}</b><small>${m2(w * l)} m²${n > 1 ? ` · ${n} ks (z každé tabule)` : ''}</small></span><button type="button" class="btn ghost sm" data-stock="${w}|${l}|${n}"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M3 7.5h14M3 12.5h14M4 3.5v13M16 3.5v13"/></svg>Do skladu</button></li>`;
+  }).join('');
+  return `<div class="offs"><div class="offs-h">Zbytky <span class="hint">šířka × délka</span></div><ul>${rows}</ul></div>`;
+}
+
 /* ---------- OBDÉLNÍKY (přesně, s postupem střihu) ---------- */
 export function renderRect(best, P, running, opts) {
   const k = P.kerf;
@@ -148,7 +172,8 @@ function rectCard(g, P, X, exact, opts) {
   let pa = 0; for (const p of s.placed) pa += (p.w - k) * (p.h - k);
   const steps = (P.cut === 'g' && s.root) ? collectSteps(s.root) : [];
   const nums = new Map(); steps.forEach((n, i) => nums.set(n, i + 1));
-  const svg = rectSVG(s, P, X, nums, P.cut === 'g' && opts.showCuts);
+  const offs = offcuts(s, P, X);
+  const svg = rectSVG(s, P, X, nums, P.cut === 'g' && opts.showCuts, offs);
   let cuts;
   if (P.cut === 'g') {
     const items = [];
@@ -157,7 +182,7 @@ function rectCard(g, P, X, exact, opts) {
     cuts = items.length ? `<details class="cuts"><summary>Postup střihu <span class="cnt">${items.length}</span></summary><ol>${items.join('')}</ol></details>` : '';
   } else cuts = '';
   const meta = `${pct(pa / (X * P.Y))} využito · zbyde ${m2(Math.max(0, X * P.Y - pa))} m²`;
-  return `<article class="sheet">${cardHead(g, P, meta, false)}<div class="svgbox">${svg}</div>${cuts}</article>`;
+  return `<article class="sheet">${cardHead(g, P, meta, false)}<div class="svgbox">${svg}</div>${offList(offs, g.n)}${cuts}</article>`;
 }
 /** Největší použitelné zbytky obdélníkového rozložení (aspoň MIN_OFF × MIN_OFF, nejvýš MAX_OFF kusů). */
 function offcuts(s, P, X) {
@@ -180,21 +205,10 @@ function stepText(n, P, X) {
   const off = n.dir === 'v' ? n.a.w - k : n.a.h - k;
   return `${from}: střih ${n.dir === 'v' ? 'napříč' : 'podélně'} na <span class="mono">${fmt(off)} ${U()}</span> → ${partLabel(n.a, P, X)} a ${partLabel(n.b, P, X)}`;
 }
-function rectSVG(s, P, X, nums, showCuts) {
+function rectSVG(s, P, X, nums, showCuts, offs) {
   const k = P.kerf, Y = P.Y, M = Math.max(X, Y), fs = M / 42, pad = fs * 2.3, minF = M / 150;
   const o = [`<rect x="0" y="0" width="${X}" height="${Y}" class="sv-steel"/>`];
-  for (const r of offcuts(s, P, X)) {
-    o.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" class="sv-off" vector-effect="non-scaling-stroke"/>`);
-    o.push(fitText(['ZBYTEK', `${m2(r.w * r.h)} m²`], r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, fs * 0.7, minF, 'sv-to', 'sv-ton'));
-  }
-  if (false) {
-    let big = null;
-    for (const f of s.free) { const rw = Math.min(f.x + f.w - k, X) - f.x, rh = f.h - k; if (rw > 0 && rh > 0 && (!big || rw * rh > big.a)) big = { f, rw, rh, a: rw * rh }; }
-    if (big && big.rw >= 80 && big.rh >= 80) {
-      o.push(`<rect x="${big.f.x}" y="${big.f.y}" width="${big.rw}" height="${big.rh}" class="sv-off" vector-effect="non-scaling-stroke"/>`);
-      o.push(fitText(['ZBYTEK', `${m2(big.rw * big.rh)} m²`], big.f.x + big.rw / 2, big.f.y + big.rh / 2, big.rw, big.rh, fs * 0.75, minF, 'sv-to', 'sv-ton'));
-    }
-  }
+  (offs || offcuts(s, P, X)).forEach((r, i) => o.push(offG(r, i, fs, minF)));
   for (const p of s.placed) {
     const pw = p.w - k, ph = p.h - k, d = P.byPi[p.it.pi];
     o.push(`<rect x="${p.x}" y="${p.y}" width="${pw}" height="${ph}" class="sv-piece" style="fill:var(--p${d.ci})" vector-effect="non-scaling-stroke"/>`);
@@ -367,10 +381,7 @@ function nestCard(g, P, X, running) {
   const M = Math.max(X, Y), fs = M / 42, pad = fs * 2.3, minF = M / 150;
   const o = [`<rect x="0" y="0" width="${X}" height="${Y}" class="sv-steel"/>`];
   let pa = 0;
-  for (const r of g.free || []) {
-    o.push(`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" class="sv-off" vector-effect="non-scaling-stroke"/>`);
-    o.push(fitText(['ZBYTEK', `${m2(r.w * r.h)} m²`], r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, fs * 0.75, minF, 'sv-to', 'sv-ton'));
-  }
+  (g.free || []).forEach((r, i) => o.push(offG(r, i, fs, minF)));
   // plocha šedého plechu mezi díly – u každé oblasti zvlášť
   for (const b of g.free?.blobs || []) if (b.area >= 0.005e6) o.push(fitText([`${m2(b.area)} m²`], b.x, b.y, b.aw * 1.3, b.ah, fs * 0.6, minF * 1.1, 'sv-to sv-ta'));
   // díly seřazené zleva doprava – stejné číslo ve výkresu i v tabulce
@@ -387,7 +398,7 @@ function nestCard(g, P, X, running) {
   o.push(frame(X, Y, P.coil, fs * 0.8, pad));
   const rows = pos.map((p, k) => `<tr><td class="n">${k + 1}</td><td class="d">${pc(p.info.ci)}<b>${esc(p.info.name || p.info.shapeName)}</b><span class="mono">${esc(p.info.sum)}</span></td><td class="mm">${fmt(p.ox)}</td><td class="mm">${fmt(p.oy)}</td><td class="r">${[p.deg ? `o ${p.deg}°` : '', p.m ? 'zrcadlově' : ''].filter(Boolean).join(', ') || 'ne'}</td></tr>`).join('');
   const meta = `${pct(pa / (X * Y))} využito · zbyde ${m2(Math.max(0, X * Y - pa))} m²`;
-  return `<article class="sheet">${cardHead(g, P, meta, running)}<div class="svgbox">${svgWrap(X, Y, pad, o.join(''))}</div>`
+  return `<article class="sheet">${cardHead(g, P, meta, running)}<div class="svgbox">${svgWrap(X, Y, pad, o.join(''))}</div>${running ? '' : offList(g.free || [], g.n)}`
     + `<details class="cuts"><summary>Pozice dílů na plechu <span class="cnt">${s.placed.length}</span></summary><div class="tabwrap"><table class="postab"><thead><tr><th>#</th><th>Díl</th><th class="mm" title="Vzdálenost od levé hrany plechu k dílu">Od levé hrany (${U()})</th><th class="mm" title="Vzdálenost od horní hrany plechu k dílu">Od horní hrany (${U()})</th><th class="r" title="O kolik je díl na plechu otočený proti tomu, jak jsi ho zadal">Otočený</th></tr></thead><tbody>${rows}</tbody></table></div></details></article>`;
 }
 
