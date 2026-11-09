@@ -30,6 +30,7 @@
   --p0: #8fbde6; --p1: #f5b16c; --p2: #9cd497; --p3: #d2a3dc; --p4: #f2d466; --p5: #82cfc6; --p6: #ef9c90; --p7: #b1a6ec;
   --pstroke: #22303a;
   --steel: #bcc6ce; --steel-off: #dde3e8; --steel-edge: #4f5c67;
+  --off: #e2f4e6; --off-edge: #2b7a4b; --off-ink: #17502f;  /* zbytek = použitelný plech */
   --f-display: "Barlow Condensed", "Arial Narrow", Arial, sans-serif;
   --f-body: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --f-mono: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -47,6 +48,7 @@
   --p0: #2a4860; --p1: #57432f; --p2: #324f39; --p3: #4d384e; --p4: #534e2a; --p5: #2a504f; --p6: #573632; --p7: #3c385c;
   --pstroke: #c4d0d6; color-scheme: dark;
   --steel: #3b4752; --steel-off: #2b353e; --steel-edge: #a3afb8;
+  --off: #1d3828; --off-edge: #7fcf9b; --off-ink: #b4e8c6;
 }
 
 * { box-sizing: border-box; }
@@ -242,7 +244,7 @@ input[type=text].bad { border-color: var(--danger); background: var(--danger-sof
 .legend span { display: inline-flex; align-items: center; gap: 5.5px; }
 .lg-box { width: 12.5px; height: 12.5px; border-radius: 3px; border: 1px solid var(--faint); }
 .lg-waste { background: var(--steel); border-color: var(--steel-edge); }
-.lg-off { background: var(--steel-off); border: 1.5px dashed var(--steel-edge); }
+.lg-off { background: var(--off); border: 1.5px dashed var(--off-edge); }
 .lg-cut { width: 16px; height: 0; border: 0; border-top: 2px dashed var(--accent); border-radius: 0; }
 
 .sumbox { display: grid; gap: 9px; }
@@ -332,7 +334,11 @@ details.cuts li::before { content: counter(st); position: absolute; left: 0; top
 .sv-wbg { fill: var(--sheet); }
 .sv-wln { stroke: var(--hatch); }
 .sv-steel { fill: var(--steel); }
-.sv-off { fill: var(--steel-off); stroke: var(--steel-edge); stroke-width: 1.5; stroke-dasharray: 8 5; }
+.sv-off { fill: var(--off); stroke: var(--off-edge); stroke-width: 2; stroke-dasharray: 9 5; }
+.sv-ok { stroke: var(--off-edge); stroke-width: 1.3; fill: none; }
+.sv-okb { fill: var(--off); }
+.sv-ot { fill: var(--off-ink); font-family: var(--f-mono); font-weight: 600; }
+.sv-otn { font-family: var(--f-body); font-weight: 800; letter-spacing: .07em; }
 .sv-piece { stroke: var(--pstroke); stroke-width: 1.6; stroke-linejoin: round; }
 .sv-t { fill: #000000; font-family: var(--f-mono); font-weight: 500; }
 .sv-tn { fill: #000000; font-family: var(--f-body); font-weight: 700; }
@@ -548,8 +554,8 @@ i.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; back
 .offs { padding: 4px 16px 12px; }
 .offs-h { font-size: 11.5px; font-weight: 600; margin-bottom: 6px; display: flex; gap: 8px; align-items: baseline; }
 .offs ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
-.offs li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 6px 6px 8px; border: 1px dashed var(--steel-edge); border-radius: var(--r); background: color-mix(in srgb, var(--steel-off) 45%, var(--panel)); }
-.ofn { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 600 11.5px var(--f-mono); background: var(--panel); border: 1px solid var(--line-2); }
+.offs li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 6px 6px 8px; border: 1px dashed var(--off-edge); border-radius: var(--r); background: color-mix(in srgb, var(--off) 55%, var(--panel)); }
+.ofn { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font: 700 11.5px var(--f-mono); background: var(--off-edge); color: #fff; }
 .ofd { display: grid; min-width: 0; }
 .ofd b { font-size: 13px; }
 .ofd small { font-size: 11.5px; color: var(--muted); }
@@ -566,7 +572,7 @@ i.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; back
 .stockform .btn { grid-column: 1 / -1; }
 .stocklist { display: grid; gap: 6px; padding-top: 12px; }
 .stock { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto auto; gap: 9px; align-items: center; padding: 7px 7px 7px 9px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); }
-.st-r { fill: var(--steel-off); stroke: var(--steel-edge); stroke-width: 1.2; stroke-dasharray: 3 2; }
+.st-r { fill: var(--off); stroke: var(--off-edge); stroke-width: 1.2; stroke-dasharray: 3 2; }
 .st-i { display: grid; min-width: 0; }
 .st-i .hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; }
 .st-q { font: 700 13px var(--f-mono); }

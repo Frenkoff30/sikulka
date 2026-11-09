@@ -131,15 +131,24 @@ const pc = (ci) => `<span class="pc" style="background:var(--p${ci % 8})"></span
 /** Zbytek na výkrese: čárkovaný obdélník, délky stran podél horní a levé hrany, uprostřed číslo, rozměr a plocha. */
 function offG(r, k, fs, minF) {
   const o = [`<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" class="sv-off" vector-effect="non-scaling-stroke"/>`];
-  const fe = Math.min(fs * 0.55, r.w / 6, r.h / 5);
+  const fe = Math.min(fs * 0.72, r.w / 5.5, r.h / 5);
   let ins = 0;
   if (fe >= minF) {
-    ins = fe * 1.9;
-    o.push(`<text x="${r.x + r.w / 2}" y="${r.y + fe * 0.95}" class="sv-to sv-oe" font-size="${fe}" text-anchor="middle" dominant-baseline="central">${fmt(r.w)}</text>`);
-    const lx = r.x + fe * 0.95, ly = r.y + r.h / 2;
-    o.push(`<text x="${lx}" y="${ly}" class="sv-to sv-oe" font-size="${fe}" text-anchor="middle" dominant-baseline="central" transform="rotate(-90 ${lx} ${ly})">${fmt(r.h)}</text>`);
+    // kóty jako na výkrese: čára se značkami na koncích, číslo uprostřed na podkladu
+    const m = fe * 0.5, t = fe * 0.38, d = fe * 1.05;
+    const kota = (x0, y0, x1, y1, val, rot) => {
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, tw = val.length * fe * 0.6 + fe * 0.7, th = fe * 1.25;
+      const ticks = rot ? `M${x0 - t} ${y0}H${x0 + t}M${x1 - t} ${y1}H${x1 + t}` : `M${x0} ${y0 - t}V${y0 + t}M${x1} ${y1 - t}V${y1 + t}`;
+      const tr = rot ? ` transform="rotate(-90 ${cx} ${cy})"` : '';
+      return `<path d="M${x0} ${y0}L${x1} ${y1}${ticks}" class="sv-ok" vector-effect="non-scaling-stroke"/>`
+        + `<rect x="${cx - tw / 2}" y="${cy - th / 2}" width="${tw}" height="${th}" class="sv-okb"${tr}/>`
+        + `<text x="${cx}" y="${cy}" class="sv-ot" font-size="${fe}" text-anchor="middle" dominant-baseline="central"${tr}>${val}</text>`;
+    };
+    o.push(kota(r.x + m, r.y + d, r.x + r.w - m, r.y + d, fmt(r.w), false));
+    o.push(kota(r.x + d, r.y + m, r.x + d, r.y + r.h - m, fmt(r.h), true));
+    ins = fe * 2.1;
   }
-  o.push(fitText([`ZBYTEK ${k + 1}`, `${fmt(r.h)} × ${fmt(r.w)}`, `${m2(r.w * r.h)} m²`], r.x + (r.w + ins) / 2, r.y + (r.h + ins) / 2, r.w - ins, r.h - ins, fs * 0.7, minF, 'sv-to', 'sv-ton'));
+  o.push(fitText([`ZBYTEK ${k + 1}`, `${fmt(r.h)} × ${fmt(r.w)} ${U()}`, `${m2(r.w * r.h)} m²`], r.x + (r.w + ins) / 2, r.y + (r.h + ins) / 2, r.w - ins, r.h - ins, fs * 0.8, minF, 'sv-ot', 'sv-otn'));
   return o.join('');
 }
 /** Seznam zbytků pod výkresem – rozměry, plocha a tlačítko „Do skladu“ (n = kolik je stejných tabulí). */
