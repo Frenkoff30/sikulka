@@ -5,3 +5,9 @@ node_modules/
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# soukromé klíče licencí nikdy do repa
+SIKULA-licence/
+soukromy-klic*.json
+*.pem
+vydane-licence.csv
