@@ -6,9 +6,11 @@ import { NestSolver } from './nest-engine.js';
 import { renderWarns, renderEmpty, renderBlank, renderRect, renderLayout, layoutFromSnap, layoutFromRect, updateStatus } from './render.js';
 import { initEditor, openEditor } from './editor.js';
 import { openManual } from './manual.js';
+import { CONFIG, verifyKey, status, today, czDate } from './licence.js';
 
 /* ---------- stav ---------- */
 const KEY = 'narez-plechu-v2', KEY_V1 = 'narez-plechu-v1', JOBS = 'narez-zakazky-v1', THEME = 'narez-vzhled-v2', STOCK = 'narez-sklad-v1';
+const LIC = 'narez-licence-v1', BKDATE = 'narez-zaloha-v1', BARX = 'narez-prouzek-v1';
 const pc = (name, t, p, q, rot = true) => ({ name, q: String(q), rot, shape: { t, p: Object.assign(defaults(t), p), pts: [] } });
 const example = () => ({
   unit: 'mm', mode: 'sheet', W: '1250', L: '2500', cut: 'g', kerf: '0', showCuts: true, example: true, manual: null,
@@ -47,14 +49,13 @@ const save = () => store.set(KEY, state);
 
 /* ---------- motiv ---------- */
 // Aplikace je vždy světlá. Tmavý režim jen když si ho člověk sám zapne tlačítkem.
+// Přepínač je v okně Aplikace.
 function applyTheme() {
   const t = store.get(THEME) === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = t;
-  $('btnTheme').setAttribute('aria-label', t === 'dark' ? 'Přepnout na světlý vzhled' : 'Přepnout na tmavý vzhled');
-  $('btnTheme').title = $('btnTheme').getAttribute('aria-label');
-  $('themeL').textContent = t === 'dark' ? 'Světlý' : 'Tmavý';
+  $('th-' + t).checked = true;
 }
-$('btnTheme').addEventListener('click', () => { store.set(THEME, store.get(THEME) === 'dark' ? 'light' : 'dark'); applyTheme(); });
+document.querySelectorAll('input[name=theme]').forEach((r) => r.addEventListener('change', () => { store.set(THEME, r.value); applyTheme(); }));
 
 /* ---------- jednotky ---------- */
 // Všechny délky v zadání jsou uložené v jednotce zakázky. Při přepnutí se přepočítají.
@@ -370,6 +371,7 @@ $('jobForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const name = $('jobName').value.trim() || `Zakázka ${new Date().toLocaleDateString('cs-CZ')}`;
   const list = jobs().filter((j) => j.name !== name);
+  if (plan.mode === 'demo' && list.length >= CONFIG.DEMO_JOBS) return limitHit(`V demo verzi jdou uložit nejvýš ${CONFIG.DEMO_JOBS} zakázky. Smaž některou starou, nebo aktivuj licenci.`);
   state.jobName = name;
   list.unshift({ name, date: Date.now(), data: JSON.parse(JSON.stringify(state)) });
   if (!store.set(JOBS, list)) return toast('Uložení se nepovedlo – paměť prohlížeče je plná nebo zakázaná.');
@@ -392,6 +394,7 @@ const stock = () => store.get(STOCK) || [];
 function addStock(w, l, q, note, job) {
   const list = stock();
   const same = list.find((s) => s.w === w && s.l === l && (s.note || '') === note);
+  if (!same && plan.mode === 'demo' && list.length >= CONFIG.DEMO_STOCK) return limitHit(`V demo verzi jdou do skladu uložit nejvýš ${CONFIG.DEMO_STOCK} různé zbytky. Pro neomezený sklad aktivuj licenci.`);
   if (same) { same.q += q; same.date = Date.now(); } else list.unshift({ id: Date.now().toString(36), w, l, q, note, job, date: Date.now() });
   if (!store.set(STOCK, list)) return toast('Uložení se nepovedlo – paměť prohlížeče je plná nebo zakázaná.');
   renderStockBadge(); if (!$('stockDlg').hidden) renderStock();
@@ -447,6 +450,125 @@ $('stockList').addEventListener('click', (e) => {
   }
 });
 
+/* ---------- licence ---------- */
+// mode: 'beta' (zdarma do konce bety) | 'full' (platná licence) | 'demo' (omezené ukládání, tisk s vodoznakem)
+let lic = null, plan = status(null);
+const PRICE = `${CONFIG.PRICE} Kč na rok`;
+const buyBtn = (t = 'Koupit licenci') => `<a class="btn primary sm" href="${CONFIG.BUY_URL}" target="_blank" rel="noopener">${t}</a>`;
+function applyPlan() {
+  plan = status(lic);
+  document.body.dataset.plan = plan.mode;
+  const tag = $('planTag');
+  tag.hidden = plan.mode === 'full'; tag.textContent = plan.mode === 'beta' ? 'Beta' : 'Demo';
+  tag.title = plan.mode === 'beta' ? `Beta verze zdarma do ${czDate(CONFIG.BETA_END)}` : 'Demo verze – aktivovat licenci';
+  $('printFoot').textContent = plan.mode === 'full' ? `Nářez plechu · licence č. ${lic.n} · ${lic.f}`
+    : plan.mode === 'beta' ? 'Nářez plechu · beta verze' : `Nářez plechu · DEMO verze · plná verze na webostudio.cz`;
+  renderBar();
+  if (!$('appDlg').hidden) renderLic();
+}
+function renderBar() {
+  let sig = '', text = '', go = '';
+  if (plan.mode === 'beta') { sig = 'beta'; text = `Beta verze, zdarma do ${czDate(CONFIG.BETA_END)}.`; go = 'Napsat nápad'; }
+  else if (plan.mode === 'demo') { sig = 'demo|' + today(); text = plan.expired ? `Licence skončila ${czDate(lic.e)}. Aplikace jede jako demo.` : `Demo verze. Plná verze stojí ${PRICE}.`; go = 'Aktivovat licenci'; }
+  else if (plan.left <= CONFIG.WARN_DAYS) { sig = 'warn|' + today(); text = `Licence končí ${czDate(lic.e)}${plan.left > 0 ? ` (za ${plan.left} ${plural(plan.left, 'den', 'dny', 'dní')})` : ' (dnes)'}.`; go = 'Prodloužit'; }
+  $('lbar').hidden = !sig || store.get(BARX) === sig;
+  $('lbar').dataset.sig = sig; $('lbarT').textContent = text; $('lbarGo').textContent = go;
+}
+$('lbarX').addEventListener('click', () => { store.set(BARX, $('lbar').dataset.sig); $('lbar').hidden = true; });
+$('lbarGo').addEventListener('click', () => {
+  if (plan.mode === 'beta') location.href = $('fbMail').href;
+  else openApp();
+});
+$('planTag').addEventListener('click', () => openApp());
+
+function renderLic(msg) {
+  let h;
+  if (plan.mode === 'full') {
+    const warn = plan.left <= CONFIG.WARN_DAYS;
+    h = `<div class="licst ok"><b>Plná verze</b><span>${esc(lic.f)}</span><span class="hint">Platí do ${czDate(lic.e)} · zbývá ${plan.left} ${plural(plan.left, 'den', 'dny', 'dní')} · licence č. ${esc(lic.n)}</span></div>
+      ${warn ? `<p class="hint">Licence brzy skončí. Po zaplacení dostaneš nový klíč a vložíš ho níž.</p><div class="btnrow">${buyBtn('Prodloužit licenci')}</div>` : ''}`;
+  } else if (plan.mode === 'beta') {
+    h = `<div class="licst beta"><b>Beta verze, zdarma</b><span>do ${czDate(CONFIG.BETA_END)} · zbývá ${plan.left} ${plural(plan.left, 'den', 'dny', 'dní')}</span></div>
+      <p class="hint">Teď je všechno odemčené. Po skončení bety stojí plná verze <b>${PRICE}</b>. Bez licence pojede aplikace dál jako demo: nejvýš ${CONFIG.DEMO_JOBS} uložené zakázky a ${CONFIG.DEMO_STOCK} zbytky ve skladu, tisk s nápisem DEMO.</p>
+      <div class="btnrow">${buyBtn('Mám zájem o licenci')}</div>`;
+  } else {
+    h = `<div class="licst demo"><b>Demo verze</b><span>${plan.expired ? `Licence pro ${esc(lic.f)} skončila ${czDate(lic.e)}.` : `Plná verze stojí ${PRICE}.`}</span></div>
+      <p class="hint">Počítá a skládá všechno, jen uloží nejvýš ${CONFIG.DEMO_JOBS} zakázky a ${CONFIG.DEMO_STOCK} zbytky a tisk má nápis DEMO. Plná verze nemá žádná omezení a jede na počítači, tabletu i mobilu.</p>
+      <div class="btnrow">${buyBtn(plan.expired ? 'Prodloužit licenci' : 'Koupit licenci')}</div>`;
+  }
+  $('licBox').innerHTML = (msg ? `<p class="note limit">${esc(msg)}</p>` : '') + h;
+  $('licKeyL').textContent = plan.mode === 'full' ? 'Nový klíč (při prodloužení)' : 'Licenční klíč';
+}
+function limitHit(msg) { closeJobs(); closeStock(); openApp(msg); }
+
+async function activate(text, quiet) {
+  const r = await verifyKey(text);
+  if (r.ok && r.e < today()) { r.ok = false; r.err = `Tahle licence už skončila ${czDate(r.e)}.`; }
+  if (!r.ok) { if (quiet) toast(r.err); else { $('licErr').textContent = r.err; $('licErr').hidden = false; } return false; }
+  store.set(LIC, r.key); lic = r; applyPlan();
+  $('licKey').value = ''; $('licErr').hidden = true;
+  toast(`Licence aktivována: ${r.f}, platí do ${czDate(r.e)}.`);
+  return true;
+}
+$('licForm').addEventListener('submit', (e) => { e.preventDefault(); if ($('licKey').value.trim()) activate($('licKey').value); });
+$('licKey').addEventListener('input', () => { $('licErr').hidden = true; });
+async function loadLicence() {
+  const k = store.get(LIC);
+  const r = k ? await verifyKey(k) : null;
+  lic = r?.ok ? r : null;
+  applyPlan();
+  // aktivace odkazem z e-mailu: …/#licence=NP1.…
+  const m = location.hash.match(/licence=([^&]+)/);
+  if (m) { history.replaceState(null, '', location.pathname + location.search); activate(decodeURIComponent(m[1]), true); }
+}
+
+/* ---------- okno Aplikace ---------- */
+function openApp(msg) {
+  renderLic(msg); renderBk(); applyTheme();
+  $('licErr').hidden = true;
+  $('appDlg').hidden = false; document.body.classList.add('noscroll');
+  $('appDlg').querySelector('.dlg-scroll').scrollTop = 0;
+}
+const closeApp = () => { $('appDlg').hidden = true; document.body.classList.remove('noscroll'); };
+$('btnApp').addEventListener('click', () => openApp());
+$('appX').addEventListener('click', closeApp);
+$('appDlg').addEventListener('click', (e) => { if (e.target === $('appDlg')) closeApp(); });
+$('appDlg').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeApp(); });
+$('about').innerHTML = `Nářez plechu · verze ${CONFIG.VERSION} · <a href="${CONFIG.WEB_URL}" target="_blank" rel="noopener">Webo Studio</a>`;
+$('fbMail').href = `mailto:${CONFIG.MAIL}?subject=${encodeURIComponent('Nářez plechu – nápad / chyba')}&body=${encodeURIComponent(`Ahoj,\n\n\n\n---\nVerze: ${CONFIG.VERSION}\nZařízení: ${navigator.userAgent}`)}`;
+
+/* ---------- záloha ---------- */
+function renderBk() {
+  const d = store.get(BKDATE), nj = jobs().length, ns = stock().length;
+  $('bkInfo').textContent = `${nj} ${plural(nj, 'zakázka', 'zakázky', 'zakázek')} · ${ns} ${plural(ns, 'zbytek', 'zbytky', 'zbytků')} · poslední záloha: ${d ? new Date(d).toLocaleDateString('cs-CZ') : 'zatím žádná'}`;
+}
+$('bkSave').addEventListener('click', () => {
+  const data = { app: 'narez-plechu', v: 1, date: new Date().toISOString(), state, jobs: jobs(), stock: stock(), licence: store.get(LIC) || null };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  const a = document.createElement('a'); a.href = url; a.download = `narez-plechu-zaloha-${today()}.json`;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  store.set(BKDATE, Date.now()); renderBk(); toast('Záloha uložena (složka Stažené soubory).');
+});
+$('bkLoad').addEventListener('click', () => $('bkFile').click());
+$('bkFile').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let d = null; try { d = JSON.parse(await f.text()); } catch { /* níž */ }
+  if (d?.app !== 'narez-plechu' || !Array.isArray(d.jobs) || !Array.isArray(d.stock)) return toast('Tohle není záloha z Nářezu plechu.');
+  d.jobs = d.jobs.filter((j) => j?.name && Array.isArray(j.data?.pieces));
+  d.stock = d.stock.filter((s) => s?.w > 0 && s.l > 0 && s.q > 0);
+  const old = { state: JSON.parse(JSON.stringify(state)), jobs: jobs(), stock: stock(), lic: store.get(LIC) };
+  const put = (s, j, st, k) => {
+    store.set(JOBS, j); store.set(STOCK, st);
+    if (s && Array.isArray(s.pieces)) { state = s; if (!UNITS[state.unit]) state.unit = 'mm'; setUnit(state.unit); }
+    if (k !== undefined) { if (k) store.set(LIC, k); else try { localStorage.removeItem(LIC); } catch { /* nic */ } }
+    renderStatic(); renderPieces(); schedule(); renderStockBadge(); renderBk(); loadLicence();
+  };
+  // licenci ze zálohy vezmi jen když tady žádná platná není
+  put(d.state, d.jobs, d.stock, !lic && d.licence ? d.licence : undefined);
+  toast(`Obnoveno ze zálohy: ${d.jobs.length} ${plural(d.jobs.length, 'zakázka', 'zakázky', 'zakázek')}, ${d.stock.length} ${plural(d.stock.length, 'zbytek', 'zbytky', 'zbytků')}.`,
+    () => put(old.state, old.jobs, old.stock, old.lic || ''));
+});
+
 /* ---------- tisk ---------- */
 $('btnPrint').addEventListener('click', () => window.print());
 window.addEventListener('beforeprint', () => document.querySelectorAll('#sheets details').forEach((d) => { d.dataset.wasOpen = d.open ? '1' : ''; d.open = true; }));
@@ -471,6 +593,8 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) naviga
 
 /* ---------- start ---------- */
 applyTheme();
+applyPlan();
+loadLicence();
 renderStockBadge();
 initEditor();
 renderStatic();

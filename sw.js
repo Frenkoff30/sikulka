@@ -1,10 +1,10 @@
 // Service worker: aplikace funguje i bez internetu.
 // Strategie "nejdřív síť, pak uložená kopie" – nové verze se projeví hned, offline se vezme záloha.
-const CACHE = 'narez-plechu-v16';
+const CACHE = 'narez-plechu-v17';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/format.js', 'js/shapes.js', 'js/rect-engine.js', 'js/nest-engine.js', 'js/nest-worker.js',
-  'js/render.js', 'js/editor.js', 'js/manual.js',
+  'js/render.js', 'js/editor.js', 'js/manual.js', 'js/licence.js',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png',
 ];
 

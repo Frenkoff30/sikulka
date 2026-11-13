@@ -578,3 +578,32 @@ i.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; back
 .st-q { font: 700 13px var(--f-mono); }
 .st-empty { text-align: center; padding: 18px 0; }
 @media (max-width: 520px) { .stock { grid-template-columns: 40px minmax(0, 1fr) auto auto; } .stock .st-q { grid-row: 1; grid-column: 3; } .stock [data-use] { grid-column: 2 / 4; } }
+
+/* ---------- licence: štítek, proužek, okno Aplikace ---------- */
+.brand-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.plan-tag { border: 0; cursor: pointer; font: 700 10px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; padding: 3.5px 6px; border-radius: 5px; background: var(--accent); color: #fff; }
+body[data-plan="demo"] .plan-tag { background: #ffffff; color: var(--dark); }
+.lbar { display: flex; align-items: center; justify-content: center; gap: 6px 12px; flex-wrap: wrap; padding: 6px 42px 6px max(14.5px, env(safe-area-inset-left, 0px)); position: relative; background: var(--accent-soft); border-bottom: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); font-size: 12.5px; text-align: center; }
+.lbar .link { font-size: 12.5px; }
+.lbar-x { position: absolute; right: max(6px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: 0; background: none; cursor: pointer; color: var(--muted); border-radius: var(--r-s); }
+.lbar-x:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--ink); }
+.asec { display: grid; gap: 8px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.asec .btnrow a.btn { text-decoration: none; }
+.licbox { display: grid; gap: 8px; }
+.licst { display: grid; gap: 1px; padding: 10px 12.5px; border-radius: var(--r); border: 1px solid var(--line-2); border-left: 4px solid var(--accent); background: var(--panel); }
+.licst b { font-size: 14.5px; }
+.licst.ok { border-left-color: var(--ok); }
+.licst.demo { border-left-color: var(--faint); }
+.note.limit { background: var(--danger-soft); font-size: 12.5px; font-weight: 600; }
+.licform { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; align-items: end; }
+.licform input[type=text] { font-size: 12.5px; }
+.about { text-align: center; padding-top: 2px; }
+.about a { color: inherit; }
+.printfoot, .wm { display: none; }
+
+@media print {
+  .lbar, .plan-tag { display: none !important; }
+  .printfoot { display: block; margin: 10px 0 0; font-size: 10px; color: #444; text-align: right; }
+  body[data-plan="demo"] .wm { display: flex; position: fixed; inset: 0; align-items: center; justify-content: center; pointer-events: none; z-index: 99; }
+  .wm span { font: 800 150px/1 var(--f-body); letter-spacing: .1em; color: rgba(0, 0, 0, .1); transform: rotate(-30deg); }
+}

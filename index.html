@@ -30,7 +30,7 @@
   <div class="brand">
     <svg class="logo" viewBox="0 0 40 40" aria-hidden="true"><rect class="lg-bg" width="40" height="40" rx="9"/><rect class="lg-s" x="6" y="11" width="28" height="18" rx="1.5"/><path class="lg-p" d="M8.5 27 L15 13.5 L21.5 27Z"/><path class="lg-c" d="M25 11v18M25 20h9"/></svg>
     <div class="brand-t">
-      <span class="brand-n">Nářez plechu</span>
+      <span class="brand-row"><span class="brand-n">Nářez plechu</span><button type="button" class="plan-tag" id="planTag" hidden></button></span>
       <button type="button" class="jobchip" id="jobChip" title="Zakázky"><span id="jobName0">Neuložená zakázka</span><svg viewBox="0 0 12 12" aria-hidden="true"><path class="ico" d="M3 4.5l3 3 3-3"/></svg></button>
     </div>
   </div>
@@ -39,9 +39,16 @@
     <button type="button" class="hbtn" id="btnStock"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M3 3v14M17 3v14M3 8h14M3 13.5h14M5.5 5.5h5v2.5h-5zM9 10.5h6v3h-6z"/></svg><span>Sklad</span><b class="hb-badge" id="stockN" hidden></b></button>
     <button type="button" class="hbtn" id="btnJobs"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M2.5 5.5h5l1.8 2h8.2v8.5h-15z"/></svg><span>Zakázky</span></button>
     <button type="button" class="hbtn" id="btnPrint"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M5.5 7.5v-4h9v4M5.5 14h-2v-6.5h13V14h-2M5.5 11h9v6h-9z"/></svg><span>Tisk</span></button>
-    <button type="button" class="hbtn" id="btnTheme"><svg viewBox="0 0 20 20" aria-hidden="true"><circle class="ico" cx="10" cy="10" r="6.5"/><path class="ico-f" d="M10 3.5a6.5 6.5 0 0 1 0 13z"/></svg><span id="themeL">Tmavý</span></button>
+    <button type="button" class="hbtn" id="btnApp" aria-label="Aplikace: licence, záloha, vzhled" title="Licence, záloha, vzhled"><svg viewBox="0 0 20 20" aria-hidden="true"><path class="ico" d="M3.5 5.5h13M3.5 10h13M3.5 14.5h13"/></svg><span>Aplikace</span></button>
   </div>
 </header>
+
+<!-- Proužek: beta / demo / konec licence -->
+<div class="lbar" id="lbar" hidden>
+  <span id="lbarT"></span>
+  <button type="button" class="link" id="lbarGo"></button>
+  <button type="button" class="lbar-x" id="lbarX" aria-label="Skrýt proužek">✕</button>
+</div>
 
 <div class="layout" id="layout" data-view="input">
 
@@ -62,6 +69,7 @@
       <div id="summary"></div>
       <div id="warns"></div>
       <div id="sheets" class="sheets"></div>
+      <p class="printfoot" id="printFoot"></p>
     </div>
   </main>
 
@@ -228,6 +236,45 @@
   </div>
 </div>
 
+<!-- Aplikace: licence, záloha, nápady, vzhled -->
+<div class="dlg-back" id="appDlg" hidden>
+  <div class="dlg small" role="dialog" aria-modal="true" aria-labelledby="appT">
+    <div class="dlg-head"><h2 id="appT">Aplikace</h2><button type="button" class="del" id="appX" aria-label="Zavřít">✕</button></div>
+    <div class="dlg-scroll">
+      <section class="asec">
+        <div class="lbl">Licence</div>
+        <div class="licbox" id="licBox"></div>
+        <form class="licform" id="licForm">
+          <div class="field"><label for="licKey" id="licKeyL">Licenční klíč</label><input type="text" class="plain" id="licKey" placeholder="NP1.…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+          <button class="btn primary" type="submit" id="licGo">Aktivovat</button>
+        </form>
+        <p class="err" id="licErr" hidden></p>
+      </section>
+      <section class="asec">
+        <div class="lbl">Záloha dat</div>
+        <p class="hint">Zakázky a sklad zbytků jsou uložené jen v tomhle zařízení. Občas si ulož zálohu do souboru. Hodí se i k přenesení na jiný počítač nebo mobil.</p>
+        <div class="btnrow"><button type="button" class="btn ghost sm" id="bkSave">Uložit zálohu</button><button type="button" class="btn ghost sm" id="bkLoad">Obnovit ze zálohy</button></div>
+        <p class="hint" id="bkInfo"></p>
+        <input type="file" id="bkFile" accept=".json,application/json" hidden>
+      </section>
+      <section class="asec">
+        <div class="lbl">Nápad nebo chyba</div>
+        <p class="hint">Něco nefunguje, nebo by se hodilo něco navíc? Napiš, každá zpráva pomůže.</p>
+        <div class="btnrow"><a class="btn ghost sm" id="fbMail" href="#">Napsat e-mail</a></div>
+      </section>
+      <section class="asec">
+        <div class="lbl">Vzhled</div>
+        <div class="seg" role="radiogroup" aria-label="Vzhled">
+          <input type="radio" name="theme" id="th-light" value="light"><label for="th-light">Světlý</label>
+          <input type="radio" name="theme" id="th-dark" value="dark"><label for="th-dark">Tmavý</label>
+        </div>
+      </section>
+      <p class="hint about" id="about"></p>
+    </div>
+  </div>
+</div>
+
+<div class="wm" aria-hidden="true"><span>DEMO</span></div>
 <div class="toast" id="toast" role="status" hidden></div>
 </body>
 </html>

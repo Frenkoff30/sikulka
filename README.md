@@ -44,7 +44,35 @@ Aplikace je jen sada souborů a nepotřebuje žádný vlastní server. Stačí j
 statický hosting s `https`, třeba zdarma na **GitHub Pages**, **Netlify** nebo **Cloudflare Pages**.
 Lidé pak otevřou odkaz a kliknou na „Nainstalovat“ (počítač, Android) nebo „Sdílet → Přidat na plochu“ (iPhone).
 
-Při každé nové verzi změň v `sw.js` číslo v `CACHE = 'narez-plechu-v2'`, ať se lidem aktualizace hned stáhne.
+Při každé nové verzi zvyš v `sw.js` číslo v `CACHE = 'narez-plechu-v…'`, ať se lidem aktualizace hned stáhne.
+
+## Licence (beta → placená verze)
+
+Nastavení je v `js/licence.js` (`CONFIG`): konec bety, cena, limity dema, e-mail.
+
+- **Do `BETA_END`** (31. 1. 2027) je všechno zdarma, nahoře je proužek „Beta“.
+- **Potom bez licence** jede appka jako **demo**: nejvýš 3 uložené zakázky a 3 zbytky, tisk s nápisem DEMO.
+  Starší zakázky a zbytky nikomu nezmizí, jen nejdou přidávat další.
+- **S licencí** je všechno odemčené a ve výkresu je v patičce jméno firmy. Měsíc před koncem appka připomene prodloužení.
+
+Licenční klíč je digitálně podepsaný. Aplikace ho ověří sama, bez serveru a bez internetu.
+
+### Jak vydat licenci
+
+```
+node nastroje/licence.mjs "Klempířství Novák" 2027-12-31
+```
+
+Bez data platí rok od dneška. Vypíše klíč a odkaz, který licenci rovnou aktivuje. Pošli obojí zákazníkovi
+(na iPhonu se klíč vkládá ručně: **Aplikace → Licence**). Přehled vydaných: `node nastroje/licence.mjs seznam`.
+
+**Soukromý klíč** je ve složce `../SIKULA-licence` vedle projektu, **nikdy ne v repu**. Kdo ho má, vyrobí si licenci.
+Když se ztratí, nové licence už nevydáš, tak si složku zálohuj i jinam než na OneDrive.
+
+## Záloha dat
+
+Zakázky a sklad jsou uložené jen v prohlížeči daného zařízení. V okně **Aplikace** jde uložit zálohu do souboru
+a obnovit ji (i na jiném zařízení). Obnova nahradí zakázky a sklad, dá se vrátit tlačítkem v hlášce.
 
 ## Struktura projektu
 
@@ -63,6 +91,8 @@ js/nest-worker.js       počítání tvarů na pozadí, aby se aplikace nesekala
 js/render.js            výkresy a souhrn
 js/manual.js            ruční skládání
 js/format.js            pomocné funkce (čísla, výrazy, formát)
+js/licence.js           licence: ověření klíče, beta / demo / plná verze
+nastroje/licence.mjs    generátor licenčních klíčů (spouští se v Node)
 ```
 
 ## Poznámky k přesnosti
